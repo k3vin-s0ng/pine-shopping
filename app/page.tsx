@@ -1,12 +1,13 @@
-'use client'
+'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, List, ListOrdered, Download, FileText } from 'lucide-react';
 
 export default function WordProcessor() {
   const [content, setContent] = useState('');
   const [fontSize, setFontSize] = useState('16');
   const [fontFamily, setFontFamily] = useState('Arial');
+  const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
   const editorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -16,6 +17,20 @@ export default function WordProcessor() {
   const executeCommand = (command: string, value?: string) => {
     document.execCommand(command, false, value);
     editorRef.current?.focus();
+    updateActiveFormats();
+  };
+
+  const updateActiveFormats = () => {
+    const formats = new Set<string>();
+    if (document.queryCommandState('bold')) formats.add('bold');
+    if (document.queryCommandState('italic')) formats.add('italic');
+    if (document.queryCommandState('underline')) formats.add('underline');
+    if (document.queryCommandState('justifyLeft')) formats.add('justifyLeft');
+    if (document.queryCommandState('justifyCenter')) formats.add('justifyCenter');
+    if (document.queryCommandState('justifyRight')) formats.add('justifyRight');
+    if (document.queryCommandState('insertUnorderedList')) formats.add('insertUnorderedList');
+    if (document.queryCommandState('insertOrderedList')) formats.add('insertOrderedList');
+    setActiveFormats(formats);
   };
 
   const handleFontSizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -105,21 +120,21 @@ export default function WordProcessor() {
             {/* Text formatting */}
             <button
               onClick={() => executeCommand('bold')}
-              className="p-2 hover:bg-gray-200 rounded"
+              className={`p-2 rounded ${activeFormats.has('bold') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
               title="Bold"
             >
               <Bold size={18} />
             </button>
             <button
               onClick={() => executeCommand('italic')}
-              className="p-2 hover:bg-gray-200 rounded"
+              className={`p-2 rounded ${activeFormats.has('italic') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
               title="Italic"
             >
               <Italic size={18} />
             </button>
             <button
               onClick={() => executeCommand('underline')}
-              className="p-2 hover:bg-gray-200 rounded"
+              className={`p-2 rounded ${activeFormats.has('underline') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
               title="Underline"
             >
               <Underline size={18} />
@@ -130,21 +145,21 @@ export default function WordProcessor() {
             {/* Alignment */}
             <button
               onClick={() => executeCommand('justifyLeft')}
-              className="p-2 hover:bg-gray-200 rounded"
+              className={`p-2 rounded ${activeFormats.has('justifyLeft') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
               title="Align Left"
             >
               <AlignLeft size={18} />
             </button>
             <button
               onClick={() => executeCommand('justifyCenter')}
-              className="p-2 hover:bg-gray-200 rounded"
+              className={`p-2 rounded ${activeFormats.has('justifyCenter') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
               title="Align Center"
             >
               <AlignCenter size={18} />
             </button>
             <button
               onClick={() => executeCommand('justifyRight')}
-              className="p-2 hover:bg-gray-200 rounded"
+              className={`p-2 rounded ${activeFormats.has('justifyRight') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
               title="Align Right"
             >
               <AlignRight size={18} />
@@ -155,14 +170,14 @@ export default function WordProcessor() {
             {/* Lists */}
             <button
               onClick={() => executeCommand('insertUnorderedList')}
-              className="p-2 hover:bg-gray-200 rounded"
+              className={`p-2 rounded ${activeFormats.has('insertUnorderedList') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
               title="Bullet List"
             >
               <List size={18} />
             </button>
             <button
               onClick={() => executeCommand('insertOrderedList')}
-              className="p-2 hover:bg-gray-200 rounded"
+              className={`p-2 rounded ${activeFormats.has('insertOrderedList') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
               title="Numbered List"
             >
               <ListOrdered size={18} />
@@ -195,6 +210,8 @@ export default function WordProcessor() {
           ref={editorRef}
           contentEditable
           onInput={(e) => setContent(e.currentTarget.innerHTML)}
+          onMouseUp={updateActiveFormats}
+          onKeyUp={updateActiveFormats}
           className="min-h-[11in] p-16 focus:outline-none"
           style={{
             fontFamily: fontFamily,
