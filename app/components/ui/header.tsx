@@ -1,7 +1,5 @@
 "use client"
 
-import { History } from "lucide-react";
-import { Button } from "./button";
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
@@ -15,7 +13,6 @@ export default function header() {
             <div className="max-w-4xl mx-auto px-4 py-4">
                 <div className="flex items-center justify-between">
                     <Link href="/" className="flex items-center space-x-2">
-                        <Image className="" src="/logo.png" width={32} height={32} alt="debatepal logo" />
                         <h1 className="text-2xl font-bold text-[#062244]">Sic<span className="text-[#006bc2]">ero</span></h1>
                     </Link>
                 </div>
