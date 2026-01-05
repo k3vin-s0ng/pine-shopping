@@ -1,65 +1,210 @@
-import Image from "next/image";
+'use client'
 
-export default function Home() {
+import React, { useState, useRef, useEffect } from 'react';
+import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, List, ListOrdered, Download, FileText } from 'lucide-react';
+
+export default function WordProcessor() {
+  const [content, setContent] = useState('');
+  const [fontSize, setFontSize] = useState('16');
+  const [fontFamily, setFontFamily] = useState('Arial');
+  const editorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    editorRef.current?.focus();
+  }, []);
+
+  const executeCommand = (command: string, value?: string) => {
+    document.execCommand(command, false, value);
+    editorRef.current?.focus();
+  };
+
+  const handleFontSizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const size = e.target.value;
+    setFontSize(size);
+    executeCommand('fontSize', '7');
+    const fontElements = editorRef.current?.querySelectorAll('font[size="7"]');
+    fontElements?.forEach(el => {
+      el.removeAttribute('size');
+      (el as HTMLElement).style.fontSize = size + 'px';
+    });
+  };
+
+  const handleFontFamilyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const family = e.target.value;
+    setFontFamily(family);
+    executeCommand('fontName', family);
+  };
+
+  const downloadAsHTML = () => {
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Document</title>
+  <style>
+    body { font-family: ${fontFamily}; font-size: ${fontSize}px; padding: 40px; max-width: 8.5in; margin: 0 auto; }
+  </style>
+</head>
+<body>
+  ${editorRef.current?.innerHTML || ''}
+</body>
+</html>`;
+    
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'document.html';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadAsText = () => {
+    const text = editorRef.current?.innerText || '';
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'document.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <div className="min-h-screen bg-gray-100 py-8">
+      <div className="max-w-5xl mx-auto bg-white shadow-lg">
+        {/* Toolbar */}
+        <div className="border-b border-gray-300 bg-gray-50 p-3 sticky top-0 z-10">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Font controls */}
+            <select 
+              value={fontFamily}
+              onChange={handleFontFamilyChange}
+              className="px-2 py-1 border border-gray-300 rounded text-sm"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              <option value="Arial">Arial</option>
+              <option value="Times New Roman">Times New Roman</option>
+              <option value="Courier New">Courier New</option>
+              <option value="Georgia">Georgia</option>
+              <option value="Verdana">Verdana</option>
+            </select>
+
+            <select 
+              value={fontSize}
+              onChange={handleFontSizeChange}
+              className="px-2 py-1 border border-gray-300 rounded text-sm w-16"
             >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+              {[8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36].map(size => (
+                <option key={size} value={size}>{size}</option>
+              ))}
+            </select>
+
+            <div className="w-px h-6 bg-gray-300 mx-1" />
+
+            {/* Text formatting */}
+            <button
+              onClick={() => executeCommand('bold')}
+              className="p-2 hover:bg-gray-200 rounded"
+              title="Bold"
+            >
+              <Bold size={18} />
+            </button>
+            <button
+              onClick={() => executeCommand('italic')}
+              className="p-2 hover:bg-gray-200 rounded"
+              title="Italic"
+            >
+              <Italic size={18} />
+            </button>
+            <button
+              onClick={() => executeCommand('underline')}
+              className="p-2 hover:bg-gray-200 rounded"
+              title="Underline"
+            >
+              <Underline size={18} />
+            </button>
+
+            <div className="w-px h-6 bg-gray-300 mx-1" />
+
+            {/* Alignment */}
+            <button
+              onClick={() => executeCommand('justifyLeft')}
+              className="p-2 hover:bg-gray-200 rounded"
+              title="Align Left"
+            >
+              <AlignLeft size={18} />
+            </button>
+            <button
+              onClick={() => executeCommand('justifyCenter')}
+              className="p-2 hover:bg-gray-200 rounded"
+              title="Align Center"
+            >
+              <AlignCenter size={18} />
+            </button>
+            <button
+              onClick={() => executeCommand('justifyRight')}
+              className="p-2 hover:bg-gray-200 rounded"
+              title="Align Right"
+            >
+              <AlignRight size={18} />
+            </button>
+
+            <div className="w-px h-6 bg-gray-300 mx-1" />
+
+            {/* Lists */}
+            <button
+              onClick={() => executeCommand('insertUnorderedList')}
+              className="p-2 hover:bg-gray-200 rounded"
+              title="Bullet List"
+            >
+              <List size={18} />
+            </button>
+            <button
+              onClick={() => executeCommand('insertOrderedList')}
+              className="p-2 hover:bg-gray-200 rounded"
+              title="Numbered List"
+            >
+              <ListOrdered size={18} />
+            </button>
+
+            <div className="flex-1" />
+
+            {/* Download options */}
+            <button
+              onClick={downloadAsText}
+              className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-1 text-sm"
+              title="Download as Text"
+            >
+              <FileText size={16} />
+              .txt
+            </button>
+            <button
+              onClick={downloadAsHTML}
+              className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 flex items-center gap-1 text-sm"
+              title="Download as HTML"
+            >
+              <Download size={16} />
+              .html
+            </button>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* Editor */}
+        <div
+          ref={editorRef}
+          contentEditable
+          onInput={(e) => setContent(e.currentTarget.innerHTML)}
+          className="min-h-[11in] p-16 focus:outline-none"
+          style={{
+            fontFamily: fontFamily,
+            fontSize: fontSize + 'px',
+            lineHeight: '1.6'
+          }}
+          suppressContentEditableWarning
+        >
         </div>
-      </main>
+      </div>
     </div>
   );
 }
