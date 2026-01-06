@@ -2,8 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, List, ListOrdered, Download, FileText } from 'lucide-react';
-import {Button} from "./components/ui/button"
-import { Search } from "lucide-react"
+import { Button } from "./components/ui/button"
+import { Search, House} from "lucide-react"
 
 export default function WordProcessor() {
   const [content, setContent] = useState('');
@@ -121,166 +121,177 @@ export default function WordProcessor() {
   };
 
   return (
-    <div className="flex flex-row min-h-screen">
-      {/* Sidebar */}
-      <aside className="w-25 bg-gray-100 text-black flex flex-col items-center p-4">
-        <Button variant="outline">
-          <Search className = "h-4 w-4"/>
-        </Button>
-      </aside>
-      <main className="flex-1">
-        <div className="min-h-screen bg-white-100">
-          <div className="flex-1 bg-white flex flex-col">
-            {/* Toolbar */}
-            <div className="p-3 sticky top-0 z-10">
-              <div className="flex flex-wrap items-center gap-2">
-                {/* Font controls */}
-                <select
-                  value={fontFamily}
-                  onChange={handleFontFamilyChange}
-                  className="px-2 py-1 border border-gray-300 rounded text-sm"
-                >
-                  <option value="Arial">Arial</option>
-                  <option value="Times New Roman">Times New Roman</option>
-                  <option value="Courier New">Courier New</option>
-                  <option value="Georgia">Georgia</option>
-                  <option value="Verdana">Verdana</option>
-                </select>
+    <div className="flex flex-col h-screen">
+      <header className="bg-white border-b p-4 flex itesm-center gap-4">
+        <button><House className = "h-4 w-4"/></button>
+        <input
+          type = "text"
+          placeholder = "Document Name"
+          className="min-w-30 flex-1 text-xl font-semibold"/>
+      </header>
+      <div className="flex flex-row min-h-screen">
 
-                <select
-                  value={fontSize}
-                  onChange={handleFontSizeChange}
-                  className="px-2 py-1 border border-gray-300 rounded text-sm w-16"
-                >
-                  {[8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36].map(size => (
-                    <option key={size} value={size}>{size}</option>
-                  ))}
-                </select>
+        {/* Sidebar */}
+        <aside className="w-25 bg-gray-100 text-black flex flex-col items-center p-4">
+          <Button variant="outline">
+            <Search className="h-4 w-4" />
+          </Button>
+        </aside>
+        <main className="flex-1">
+          <div className="min-h-screen bg-white-100">
+            <div className="flex-1 bg-white flex flex-col">
+              {/* Toolbar */}
+              <div className="p-3 sticky top-0 z-10">
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Font controls */}
+                  <select
+                    value={fontFamily}
+                    onChange={handleFontFamilyChange}
+                    className="px-2 py-1 border border-gray-300 rounded text-sm"
+                  >
+                    <option value="Arial">Arial</option>
+                    <option value="Times New Roman">Times New Roman</option>
+                    <option value="Courier New">Courier New</option>
+                    <option value="Georgia">Georgia</option>
+                    <option value="Verdana">Verdana</option>
+                  </select>
 
-                <div className="w-px h-6 bg-gray-300 mx-1" />
+                  <select
+                    value={fontSize}
+                    onChange={handleFontSizeChange}
+                    className="px-2 py-1 border border-gray-300 rounded text-sm w-16"
+                  >
+                    {[8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36].map(size => (
+                      <option key={size} value={size}>{size}</option>
+                    ))}
+                  </select>
 
-                {/* Heading formats */}
-                <select
-                  onChange={(e) => executeCommand('formatBlock', e.target.value)}
-                  className="px-2 py-1 border border-gray-300 rounded text-sm"
-                  defaultValue="p"
-                >
-                  <option value="p">Normal</option>
-                  <option value="h1">Heading 1</option>
-                  <option value="h2">Heading 2</option>
-                  <option value="h3">Heading 3</option>
-                </select>
+                  <div className="w-px h-6 bg-gray-300 mx-1" />
 
-                <div className="w-px h-6 bg-gray-300 mx-1" />
+                  {/* Heading formats */}
+                  <select
+                    onChange={(e) => executeCommand('formatBlock', e.target.value)}
+                    className="px-2 py-1 border border-gray-300 rounded text-sm"
+                    defaultValue="p"
+                  >
+                    <option value="p">Normal</option>
+                    <option value="h1">Heading 1</option>
+                    <option value="h2">Heading 2</option>
+                    <option value="h3">Heading 3</option>
+                  </select>
 
-                {/* Text formatting */}
-                <button
-                  onClick={() => executeCommand('bold')}
-                  className={`p-2 rounded ${activeFormats.has('bold') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
-                  title="Bold"
-                >
-                  <Bold size={18} />
-                </button>
-                <button
-                  onClick={() => executeCommand('italic')}
-                  className={`p-2 rounded ${activeFormats.has('italic') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
-                  title="Italic"
-                >
-                  <Italic size={18} />
-                </button>
-                <button
-                  onClick={() => executeCommand('underline')}
-                  className={`p-2 rounded ${activeFormats.has('underline') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
-                  title="Underline"
-                >
-                  <Underline size={18} />
-                </button>
+                  <div className="w-px h-6 bg-gray-300 mx-1" />
 
-                <div className="w-px h-6 bg-gray-300 mx-1" />
+                  {/* Text formatting */}
+                  <button
+                    onClick={() => executeCommand('bold')}
+                    className={`p-2 rounded ${activeFormats.has('bold') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
+                    title="Bold"
+                  >
+                    <Bold size={18} />
+                  </button>
+                  <button
+                    onClick={() => executeCommand('italic')}
+                    className={`p-2 rounded ${activeFormats.has('italic') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
+                    title="Italic"
+                  >
+                    <Italic size={18} />
+                  </button>
+                  <button
+                    onClick={() => executeCommand('underline')}
+                    className={`p-2 rounded ${activeFormats.has('underline') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
+                    title="Underline"
+                  >
+                    <Underline size={18} />
+                  </button>
 
-                {/* Alignment */}
-                <button
-                  onClick={() => executeCommand('justifyLeft')}
-                  className={`p-2 rounded ${activeFormats.has('justifyLeft') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
-                  title="Align Left"
-                >
-                  <AlignLeft size={18} />
-                </button>
-                <button
-                  onClick={() => executeCommand('justifyCenter')}
-                  className={`p-2 rounded ${activeFormats.has('justifyCenter') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
-                  title="Align Center"
-                >
-                  <AlignCenter size={18} />
-                </button>
-                <button
-                  onClick={() => executeCommand('justifyRight')}
-                  className={`p-2 rounded ${activeFormats.has('justifyRight') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
-                  title="Align Right"
-                >
-                  <AlignRight size={18} />
-                </button>
+                  <div className="w-px h-6 bg-gray-300 mx-1" />
 
-                <div className="w-px h-6 bg-gray-300 mx-1" />
+                  {/* Alignment */}
+                  <button
+                    onClick={() => executeCommand('justifyLeft')}
+                    className={`p-2 rounded ${activeFormats.has('justifyLeft') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
+                    title="Align Left"
+                  >
+                    <AlignLeft size={18} />
+                  </button>
+                  <button
+                    onClick={() => executeCommand('justifyCenter')}
+                    className={`p-2 rounded ${activeFormats.has('justifyCenter') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
+                    title="Align Center"
+                  >
+                    <AlignCenter size={18} />
+                  </button>
+                  <button
+                    onClick={() => executeCommand('justifyRight')}
+                    className={`p-2 rounded ${activeFormats.has('justifyRight') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
+                    title="Align Right"
+                  >
+                    <AlignRight size={18} />
+                  </button>
 
-                {/* Lists */}
-                <button
-                  onClick={() => executeCommand('insertUnorderedList')}
-                  className={`p-2 rounded ${activeFormats.has('insertUnorderedList') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
-                  title="Bullet List"
-                >
-                  <List size={18} />
-                </button>
-                <button
-                  onClick={() => executeCommand('insertOrderedList')}
-                  className={`p-2 rounded ${activeFormats.has('insertOrderedList') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
-                  title="Numbered List"
-                >
-                  <ListOrdered size={18} />
-                </button>
+                  <div className="w-px h-6 bg-gray-300 mx-1" />
 
-                <div className="flex-1" />
+                  {/* Lists */}
+                  <button
+                    onClick={() => executeCommand('insertUnorderedList')}
+                    className={`p-2 rounded ${activeFormats.has('insertUnorderedList') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
+                    title="Bullet List"
+                  >
+                    <List size={18} />
+                  </button>
+                  <button
+                    onClick={() => executeCommand('insertOrderedList')}
+                    className={`p-2 rounded ${activeFormats.has('insertOrderedList') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
+                    title="Numbered List"
+                  >
+                    <ListOrdered size={18} />
+                  </button>
 
-                {/* Download options */}
-                <button
-                  onClick={downloadAsText}
-                  className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-1 text-sm"
-                  title="Download as Text"
-                >
-                  <FileText size={16} />
-                  .txt
-                </button>
-                <button
-                  onClick={downloadAsHTML}
-                  className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 flex items-center gap-1 text-sm"
-                  title="Download as HTML"
-                >
-                  <Download size={16} />
-                  .html
-                </button>
+                  <div className="flex-1" />
+
+                  {/* Download options */}
+                  <button
+                    onClick={downloadAsText}
+                    className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-1 text-sm"
+                    title="Download as Text"
+                  >
+                    <FileText size={16} />
+                    .txt
+                  </button>
+                  <button
+                    onClick={downloadAsHTML}
+                    className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 flex items-center gap-1 text-sm"
+                    title="Download as HTML"
+                  >
+                    <Download size={16} />
+                    .html
+                  </button>
+                </div>
+              </div>
+
+              {/* Editor */}
+              <div
+                ref={editorRef}
+                contentEditable
+                onInput={(e) => setContent(e.currentTarget.innerHTML)}
+                onMouseUp={updateActiveFormats}
+                onKeyUp={updateActiveFormats}
+                className="flex-1 p-16 focus:outline-none overflow-auto min-h-[600px]"
+                style={{
+                  fontFamily: fontFamily,
+                  fontSize: fontSize + 'px',
+                  lineHeight: '1.6'
+                }}
+                suppressContentEditableWarning
+              >
               </div>
             </div>
-
-            {/* Editor */}
-            <div
-              ref={editorRef}
-              contentEditable
-              onInput={(e) => setContent(e.currentTarget.innerHTML)}
-              onMouseUp={updateActiveFormats}
-              onKeyUp={updateActiveFormats}
-              className="flex-1 p-16 focus:outline-none overflow-auto min-h-[600px]"
-              style={{
-                fontFamily: fontFamily,
-                fontSize: fontSize + 'px',
-                lineHeight: '1.6'
-              }}
-              suppressContentEditableWarning
-            >
-            </div>
           </div>
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
+
 
   );
 }
