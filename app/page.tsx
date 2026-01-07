@@ -4,15 +4,16 @@ import { useState, useRef, useEffect } from 'react';
 import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, List, ListOrdered, Download, FileText } from 'lucide-react';
 import { Button } from "./components/ui/button"
 import { Search, House} from "lucide-react"
+import { useRouter } from "next/navigation"
 
 export default function WordProcessor() {
   const [content, setContent] = useState('');
   const [fontSize, setFontSize] = useState('16');
   const [fontFamily, setFontFamily] = useState('Arial');
   const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
-  const [wordCount, setWordCount] = useState(0);
-  const [charCount, setCharCount] = useState(0);
   const editorRef = useRef<HTMLDivElement>(null);
+  const [error, setError] = useState<string | null>(null)
+  const [url, setUrl] = useState("")
 
   useEffect(() => {
     editorRef.current?.focus();
@@ -35,12 +36,7 @@ export default function WordProcessor() {
     if (document.queryCommandState('insertUnorderedList')) formats.add('insertUnorderedList');
     if (document.queryCommandState('insertOrderedList')) formats.add('insertOrderedList');
     setActiveFormats(formats);
-
-    // Update word and character count
-    const text = editorRef.current?.innerText || '';
-    const words = text.trim().split(/\s+/).filter(word => word.length > 0);
-    setWordCount(words.length);
-    setCharCount(text.length);
+    
   };
 
   const handleFontSizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -120,6 +116,32 @@ export default function WordProcessor() {
     // etc.
   };
 
+  const handleEvidence = async () => {
+    setError(null)
+    try{
+      const apiUrl = process.env.NEXT_PUBLIC_EVIDENCE_EXTRACTION || "http://localhost:8000"
+
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      }
+
+      let response = await fetch(apiUrl +"/cut-from-url", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({url: url.trim(), goal: "General evidence"}),
+      }).catch(() => null)
+
+      if (!response || !response.ok) {
+        const errorData = await response?.json().catch(() => ({ detail: "Unknown error" }))
+        throw new Error(errorData.detail || "HTTP error! status: "+response?.status)
+      }
+
+      const data = await response.json()
+    }catch (err){
+      setError(err instanceof Error? err.message : "An error occured with evidence extraction")
+    }
+  }
+
   return (
     <div className="flex flex-col h-screen">
       <header className="bg-white border-b p-4 flex itesm-center gap-4">
@@ -133,7 +155,7 @@ export default function WordProcessor() {
 
         {/* Sidebar */}
         <aside className="w-25 bg-gray-100 text-black flex flex-col items-center p-4">
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => alert(getDocumentText())}>
             <Search className="h-4 w-4" />
           </Button>
         </aside>
