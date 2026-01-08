@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, List, ListOrdered, Download, FileText } from 'lucide-react';
 import { Button } from "./components/ui/button"
-import { Search, House } from "lucide-react"
+import { Search, House, Loader2} from "lucide-react"
 import { useRouter } from "next/navigation"
 
 export default function WordProcessor() {
@@ -11,7 +11,6 @@ export default function WordProcessor() {
   const [fontSize, setFontSize] = useState('16');
   const [fontFamily, setFontFamily] = useState('Arial');
   const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(false)
   const editorRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null)
   const [sources, setSources] = useState<any[]>([]);
@@ -105,38 +104,45 @@ export default function WordProcessor() {
   };
 
   const handleEvidence = async () => {
-    setError(null)
-    setLoading(true)
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_EVIDENCE_EXTRACTION || "http://localhost:8000"
+    // Toggle: if sources exist, clear them and return
+    if (sources.length > 0) {
+      setSources([]);
+      return;
+    }
 
+    setError(null);
+    setIsLoadingSources(true);
+
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_EVIDENCE_EXTRACTION || "http://localhost:8000";
       const headers: HeadersInit = {
         "Content-Type": "application/json",
-      }
+      };
 
       let response = await fetch(apiUrl + "/search-by-goal", {
         method: "POST",
         headers,
         body: JSON.stringify({ goal: getDocumentText().trim() }),
-      }).catch(() => null)
+      }).catch(() => null);
 
       if (!response || !response.ok) {
-        const errorData = await response?.json().catch(() => ({ detail: "Unknown error" }))
-        throw new Error(errorData.detail || "HTTP error! status: " + response?.status)
+        const errorData = await response?.json().catch(() => ({ detail: "Unknown error" }));
+        throw new Error(errorData.detail || "HTTP error! status: " + response?.status);
       }
 
-      const data = await response.json()
+      const data = await response.json();
       setSources(data.cards || []);
+
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occured with evidence extraction")
+      setError(err instanceof Error ? err.message : "An error occurred with evidence extraction");
     } finally {
-      setLoading(false)
+      setIsLoadingSources(false);
     }
-  }
+  };
 
   return (
     <div className="flex flex-col h-screen">
-      <header className="bg-white border-b p-4 flex itesm-center gap-4">
+      <header className="bg-white border-b p-4 flex items-center gap-4">
         <button><House className="h-4 w-4" /></button>
         <input
           type="text"
@@ -147,16 +153,7 @@ export default function WordProcessor() {
 
         {/* Sidebar */}
         <aside className="w-25 bg-gray-100 text-black flex flex-col items-center p-4">
-          <Button variant="outline" onClick={() => setSources([
-            {
-              tag: "Test source",
-              cite: "Author, 2024",
-              body: "This is test content",
-              url: "https://example.com",
-              credibility: 0.8,
-              source_title: "Test"
-            }
-          ])}>
+          <Button variant="outline" onClick={handleEvidence}>
             <Search className="h-4 w-4" />
           </Button>
         </aside>
@@ -313,10 +310,18 @@ export default function WordProcessor() {
           </div>
         </main>
         {/* Right sidebar - Sources */}
-        {sources.length > 0 && (
+        {(sources.length > 0 || isLoadingSources) && (
           <aside className="w-80 bg-white/80 backdrop-blur-sm border-l border-gray-200 overflow-y-auto p-4">
             <h3 className="font-semibold text-lg mb-4">Sources</h3>
-            {sources.map((source, index) => (
+
+            {isLoadingSources && (
+              <div className="flex flex-col items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                <p className="text-gray-500">Loading sources...</p>
+              </div>
+            )}
+
+            {!isLoadingSources && sources.map((source, index) => (
               <div key={index} className="mb-4 p-3 bg-white rounded border border-gray-200 shadow-sm">
                 <h4 className="font-medium text-sm mb-1">{source.tag}</h4>
                 <p className="text-xs text-gray-600 mb-2">{source.cite}</p>
@@ -329,6 +334,7 @@ export default function WordProcessor() {
                 >
                   View Source
                 </a>
+
                 <p className="text-xs text-gray-500 mt-1">
                   Credibility: {(source.credibility * 100).toFixed(0)}%
                 </p>
@@ -338,7 +344,5 @@ export default function WordProcessor() {
         )}
       </div>
     </div>
-
-
   );
 }

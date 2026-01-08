@@ -16,7 +16,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from pathlib import Path
 from dotenv import load_dotenv
-
+import urllib.parse
+import asyncio
+import httpx
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
@@ -107,129 +109,6 @@ def ping():
     """Health check endpoint."""
     return {"status": "ok"}
 
-
-# ============================================================================
-# Card Cutting functions
-# ============================================================================
-@app.post("/cut-from-url")
-async def cut_from_url(request: URLRequest, authorization: Optional[str] = Header(None)):
-    """
-    Cut cards from URL - returns multiple cards in categories format
-    """
-    IS_PRODUCTION = os.getenv("NODE_ENV", "development") == "production"
-
-    if IS_PRODUCTION:
-        if not authorization:
-            print("WARNING: /cut-from-url called without authorization header in production mode")
-
-    try:
-        # Fetch and clean URL
-        clean_text = fetch_and_clean_url(request.url)
-
-        if not clean_text or len(clean_text) < 100:
-            raise HTTPException(status_code=400, detail="Page content empty or blocked")
-
-        # Call DeepSeek/AI to cut multiple cards
-        cards_data = call_openrouter_api(clean_text, request.url)
-        
-        # Return the categories format (multiple cards)
-        return cards_data
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
-def call_openrouter_api(article_text: str, url: str) -> dict:
-    """Call Open Router API to generate debate cards (original implementation)."""
-    
-    openrouter_api_key = OPENROUTER_API_KEY
-    if not openrouter_api_key:
-        raise HTTPException(status_code=500, detail="OpenRouter API key not configured")
-    
-    prompt = f"""You are an expert high school Public Forum debate coach.
-Your task is to cut evidence cards from the following article text.
-### Requirements:
-1. **Output multiple cards:** Make sure to cover all distinct claims, warrants, or impacts in the article.
-2. **Follow Public Forum conventions:**
-   - Each card must include:
-     - **Tagline**: short, argumentative summary of the claim, warrant of impact (in all caps).
-     - **Cited text**: excerpt from the article, with important phrases wrapped in <u>underlined</u> tags and irrelevant parts replaced with ellipses (...).
-     - **Full citation**: Author, Publication, Date, URL.
-   - Keep underlined sections concise and argumentative.
-   - Use ellipses (...) to shorten but keep integrity.
-3. **Use the entire article**: scan thoroughly for every useful claim, not just the first few paragraphs.
-4. **Neutral prep**: Cut cards that could support either PRO or CON depending on how they're deployed. Don't be biased toward one side.
-5. **Organize by category:**
-   - Group cards into broad arguments (e.g., "ECONOMIC IMPACTS," "SECURITY RISKS," "ENVIRONMENTAL BENEFITS").
-   - Within each category, number the cards.
-6. **Output format** must be structured JSON:
-   {{
-     "categories": [
-       {{
-         "category": "Category Name",
-         "cards": [
-           {{
-             "tagline": "TAGLINE IN ALL CAPS",
-             "cited_text": "…underlined evidence with ellipses…",
-             "citation": "Author, Publication, Date, URL"
-           }}
-         ]
-       }}
-     ]
-   }}
-
-Article URL: {url}
-
-Article Text:
-{article_text}"""
-
-    headers = {
-        "Authorization": f"Bearer {openrouter_api_key}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://debatepalai.com",
-        "X-Title": "DebatePal Card Cutting Tool"
-    }
-    
-    payload = {
-        "model": "meta-llama/llama-3.3-70b-instruct:free",
-        "messages": [
-            {
-                "role": "user",
-                "content": prompt + "\n\nIMPORTANT: Your response must be valid JSON only, following the exact format specified above. Do not include any additional text before or after the JSON."
-            }
-        ],
-        "temperature": 0.3,
-        "max_tokens": 4000
-    }
-    
-    try:
-        response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload, timeout=60)
-        response.raise_for_status()
-        
-        result = response.json()
-        content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-        
-        # Parse JSON response
-        try:
-            # Try to extract JSON if it's wrapped in markdown code blocks
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0].strip()
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0].strip()
-            
-            cards_data = json.loads(content)
-            return cards_data
-        except json.JSONDecodeError as e:
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Failed to parse AI response as JSON. Error: {str(e)}. Response preview: {content[:500]}"
-            )
-    
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=f"DeepSeek API error: {str(e)}")
-    
-
 # ============================================================================
 # Functions used in both card cutting and searching
 # ============================================================================
@@ -279,11 +158,11 @@ async def fetch_and_clean_url(url: str) -> Optional[str]:
 @app.post("/search-by-goal")
 async def search_by_goal(request: SearchRequest, authorization: Optional[str] = Header(None)):
     """
-    Search and cut multiple cards in parallel:
-    1. Search (1 ScrapingDog call)
-    2. Auto-selects top 5 results
-    3. Processes all URLs concurrently (5 parallel fetches + AI calls)
+    Search and cut multiple cards in parallel
     """
+    print("=== ENDPOINT CALLED ===")
+    print(f"Request goal: {request.goal}")
+    
     IS_PRODUCTION = os.getenv("NODE_ENV", "development") == "production"
 
     if IS_PRODUCTION:
@@ -291,39 +170,74 @@ async def search_by_goal(request: SearchRequest, authorization: Optional[str] = 
             print("WARNING: /search-by-goal called without authorization header in production mode")
 
     try:
-        # 1. Search (synchronous)
-        goal = summarize_to_main_claim(request.goal)
-        results = perform_search(goal)
+        # 1. Try to summarize
+        print("Step 1: Starting summarization...")
+        try:
+            summarized_goal = await summarize_to_main_claim(request.goal)
+            if not summarized_goal or "Error" in summarized_goal or "Unable" in summarized_goal:
+                goal = request.goal
+                print(f"Using original goal: {goal}")
+            else:
+                goal = summarized_goal
+                print(f"Using summarized goal: {goal}")
+        except Exception as e:
+            print(f"Summarization failed: {e}")
+            import traceback
+            traceback.print_exc()
+            goal = request.goal
+        
+        # 2. Search
+        print("Step 2: Starting search...")
+        results = await perform_search(goal)
+        print(f"Search returned {len(results)} results")
 
         if not results:
             raise HTTPException(status_code=404, detail="No credible sources found")
 
-        # 2. Get top 5 results
+        # 3. Get top 5 results
+        print("Step 3: Getting top 5 results...")
         top_results = results[:5]
+        print(f"Top results: {[r['title'] for r in top_results]}")
 
-        # 3. Process all URLs in parallel
+        # 4. Process all URLs in parallel
+        print("Step 4: Processing URLs in parallel...")
         tasks = [process_single_url(article, request.goal) for article in top_results]
+        print(f"Created {len(tasks)} tasks")
+        
         cards_results = await asyncio.gather(*tasks, return_exceptions=True)
+        print(f"Gather completed, got {len(cards_results)} results")
+        
+        # Check for exceptions
+        for i, result in enumerate(cards_results):
+            if isinstance(result, Exception):
+                print(f"Task {i} failed with exception: {result}")
+                import traceback
+                traceback.print_exception(type(result), result, result.__traceback__)
         
         # Filter out None values and exceptions
         cards = [
             card for card in cards_results 
             if card is not None and isinstance(card, dict)
         ]
+        print(f"Filtered to {len(cards)} valid cards")
 
         if not cards:
             raise HTTPException(status_code=404, detail="Failed to cut cards from found sources")
 
+        print("Step 5: Returning results...")
         return {
             "search_term": request.goal,
             "cards": cards
         }
-    except HTTPException:
+    except HTTPException as e:
+        print(f"HTTPException: {e}")
         raise
     except Exception as e:
+        print(f"Unexpected error: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-@lru_cache(maxsize=1000)
 def get_heuristic_credibility(url: str, title: str = "") -> dict:
     """
     Enhanced credibility check using a tiered heuristic model.
@@ -446,7 +360,7 @@ async def process_single_url(article: dict, goal: str) -> Optional[dict]:
         return None
 
 
-def perform_search(query: str) -> List[dict]:
+async def perform_search(query: str) -> List[dict]:
     """
     Performs search using query variations, collects credible results, and sorts by score.
     Optimized with reduced variations and early exit.
@@ -465,90 +379,91 @@ def perform_search(query: str) -> List[dict]:
     
     all_results = []
     MIN_CREDIBILITY_SCORE = 0.2
-    TARGET_RESULTS = 10  # Stop early if we have enough good results
+    TARGET_RESULTS = 10
 
-    for i, (q_variation, desc) in enumerate(query_variations, 1):
-        try:
-            search_url = f"https://www.mojeek.com/search?q={urllib.parse.quote(q_variation)}&t=40"
-            encoded_target_url = urllib.parse.quote(search_url, safe=':/%')
-            scrape_url = f"https://api.scrapingdog.com/scrape?api_key={scrapingdog_key}&dynamic=false&url={encoded_target_url}"
-            
-            resp = requests.get(scrape_url, timeout=15)
-
-            if resp.status_code != 200:
-                print(f"ScrapingDog API error: HTTP {resp.status_code}")
-                continue
-
-            soup = BeautifulSoup(resp.text, 'html.parser')
-            strategy_results = []
-
-            # Parse search results
-            candidates = []
-            all_lis = soup.find_all('li')
-            
-            for li in all_lis:
-                score = 0
-                classes = li.get('class', [])
+    async with httpx.AsyncClient() as client:  # Use async client
+        for i, (q_variation, desc) in enumerate(query_variations, 1):
+            try:
+                search_url = f"https://www.mojeek.com/search?q={urllib.parse.quote(q_variation)}&t=40"
+                encoded_target_url = urllib.parse.quote(search_url, safe=':/%')
+                scrape_url = f"https://api.scrapingdog.com/scrape?api_key={scrapingdog_key}&dynamic=false&url={encoded_target_url}"
                 
-                h2 = li.find('h2')
-                if h2:
-                    score += 3
-                    if h2.find('a'):
-                        score += 5
+                resp = await client.get(scrape_url, timeout=15.0)  # Make async
 
-                if li.find('a', class_='ob'):
-                    score += 4
-                
-                if li.find('p', class_='s'):
-                    score += 3
-                
-                if isinstance(classes, str):
-                    classes = [classes]
-                if any(re.match(r'^r\d+$', c) for c in classes):
-                    score += 2
+                if resp.status_code != 200:
+                    print(f"ScrapingDog API error: HTTP {resp.status_code}")
+                    continue
 
-                if score >= 7:
-                    h2_elem = li.find('h2')
-                    link_elem = h2_elem.find('a') if h2_elem else li.find('a', class_='ob')
-                    href = link_elem.get('href') if link_elem else None
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                strategy_results = []
+
+                # Parse search results (rest stays the same)
+                candidates = []
+                all_lis = soup.find_all('li')
+                
+                for li in all_lis:
+                    score = 0
+                    classes = li.get('class', [])
                     
-                    if href and href.startswith('http'): 
-                        candidates.append(li)
-            
-            search_items = candidates[:15]
+                    h2 = li.find('h2')
+                    if h2:
+                        score += 3
+                        if h2.find('a'):
+                            score += 5
 
-            for j, item in enumerate(search_items, 1):
-                h2 = item.find('h2')
-                title_link = h2.find('a') if h2 else None
-                ob_link = item.find('a', class_='ob')
+                    if li.find('a', class_='ob'):
+                        score += 4
+                    
+                    if li.find('p', class_='s'):
+                        score += 3
+                    
+                    if isinstance(classes, str):
+                        classes = [classes]
+                    if any(re.match(r'^r\d+$', c) for c in classes):
+                        score += 2
+
+                    if score >= 7:
+                        h2_elem = li.find('h2')
+                        link_elem = h2_elem.find('a') if h2_elem else li.find('a', class_='ob')
+                        href = link_elem.get('href') if link_elem else None
+                        
+                        if href and href.startswith('http'): 
+                            candidates.append(li)
                 
-                title_text = h2.get_text(strip=True) if h2 else "No Title"
-                href = None
+                search_items = candidates[:15]
+
+                for j, item in enumerate(search_items, 1):
+                    h2 = item.find('h2')
+                    title_link = h2.find('a') if h2 else None
+                    ob_link = item.find('a', class_='ob')
+                    
+                    title_text = h2.get_text(strip=True) if h2 else "No Title"
+                    href = None
+                    
+                    if title_link and title_link.get('href'):
+                        href = title_link.get('href')
+                    elif ob_link and ob_link.get('href'):
+                        href = ob_link.get('href')
+
+                    if href and h2:
+                        cred = get_heuristic_credibility(href, title_text)
+
+                        if cred['score'] >= MIN_CREDIBILITY_SCORE:
+                            strategy_results.append({
+                                "title": title_text,
+                                "url": href,
+                                "score": cred['score']
+                            })
+
+                all_results.extend(strategy_results)
                 
-                if title_link and title_link.get('href'):
-                    href = title_link.get('href')
-                elif ob_link and ob_link.get('href'):
-                    href = ob_link.get('href')
+                # Early exit if we have enough good results
+                if len(all_results) >= TARGET_RESULTS:
+                    break
 
-                if href and h2:
-                    cred = get_heuristic_credibility(href, title_text)
-
-                    if cred['score'] >= MIN_CREDIBILITY_SCORE:
-                        strategy_results.append({
-                            "title": title_text,
-                            "url": href,
-                            "score": cred['score']
-                        })
-
-            all_results.extend(strategy_results)
-            
-            # Early exit if we have enough good results
-            if len(all_results) >= TARGET_RESULTS:
-                break
-
-        except Exception as e:
-            print(f"Search variation '{desc}' failed: {e}")
-            continue
+            except Exception as e:
+                print(f"Search variation '{desc}' failed: {e}")
+                continue
 
     if not all_results:
         print(f"No credible sources found for '{query}'")
