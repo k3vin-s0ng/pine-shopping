@@ -233,9 +233,11 @@ Article Text:
 # ============================================================================
 # Functions used in both card cutting and searching
 # ============================================================================
-def fetch_and_clean_url(url: str) -> Optional[str]:
+
+async def fetch_and_clean_url(url: str) -> Optional[str]:
     """
     Fetch URL using ScrapingDog and clean HTML. Returns clean text or None.
+    Async version using httpx.
     """
     try:
         scrapingdog_key = get_scrapingdog_key()
@@ -245,44 +247,42 @@ def fetch_and_clean_url(url: str) -> Optional[str]:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             }
-            resp = requests.get(url, headers=headers, timeout=30)
-            resp.raise_for_status()
-            return clean_html_free(resp.text)
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, headers=headers, timeout=30.0)
+                resp.raise_for_status()
+                return clean_html_free(resp.text)
         except Exception as e:
             print(f"Direct fetch error: {e}")
             return None
 
     # Use ScrapingDog with URL as last parameter
-    import urllib.parse
     encoded_url = urllib.parse.quote(url, safe=':/%')
     scrape_url = f"https://api.scrapingdog.com/scrape?api_key={scrapingdog_key}&dynamic=false&url={encoded_url}"
+    
     try:
-        resp = requests.get(scrape_url, timeout=30)
-        resp.raise_for_status()
-        clean_text = clean_html_free(resp.text)
-        if len(clean_text) < 200:
-            return None
-        return clean_text
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(scrape_url, timeout=30.0)
+            resp.raise_for_status()
+            clean_text = clean_html_free(resp.text)
+            if len(clean_text) < 200:
+                return None
+            return clean_text
     except Exception as e:
         print(f"ScrapingDog fetch error: {e}")
         return None
-# ============================================================================
-# Functions used in URL search
-# ============================================================================
 
-#perform_search
-#extract_article_url
-#cut_card_with_ai
-#get_heuristic_credibility
 
+# ============================================================================
+# Functions for Searching
+# ============================================================================
 
 @app.post("/search-by-goal")
 async def search_by_goal(request: SearchRequest, authorization: Optional[str] = Header(None)):
     """
-    Search and cut multiple cards:
-    1. Python-only Search (1 ScrapingDog call)
+    Search and cut multiple cards in parallel:
+    1. Search (1 ScrapingDog call)
     2. Auto-selects top 5 results
-    3. Cuts cards from each, skips failures (3-5 Cheap AI calls)
+    3. Processes all URLs concurrently (5 parallel fetches + AI calls)
     """
     IS_PRODUCTION = os.getenv("NODE_ENV", "development") == "production"
 
@@ -291,41 +291,25 @@ async def search_by_goal(request: SearchRequest, authorization: Optional[str] = 
             print("WARNING: /search-by-goal called without authorization header in production mode")
 
     try:
-        # 1. Search
-        results = perform_search(request.goal)
+        # 1. Search (synchronous)
+        goal = summarize_to_main_claim(request.goal)
+        results = perform_search(goal)
 
         if not results:
             raise HTTPException(status_code=404, detail="No credible sources found")
 
         # 2. Get top 5 results
-        top_results = results[:5]  # Get up to 5 results
+        top_results = results[:5]
 
-        # 3. Cut cards from each source - skip any that fail
-        cards = []
-        for article in top_results:
-            try:
-                # Scrape source
-                clean_text = fetch_and_clean_url(article['url'])
-
-                if not clean_text:
-                    # Skip if can't scrape - don't raise error, just continue
-                    continue
-
-                # Cut Card
-                card_data = cut_card_with_ai(clean_text, article['url'], request.goal)
-
-                cards.append({
-                    "tag": card_data.get("tag", "Extracted Evidence"),
-                    "cite": card_data.get("cite", "Unknown Source"),
-                    "body": card_data.get("body", clean_text[:500]),
-                    "url": article['url'],
-                    "credibility": get_heuristic_credibility(article['url'])['score'],
-                    "source_title": article['title']
-                })
-            except Exception as e:
-                # Skip this URL and move to next one
-                print(f"Skipping {article['url']}: {e}")
-                continue
+        # 3. Process all URLs in parallel
+        tasks = [process_single_url(article, request.goal) for article in top_results]
+        cards_results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Filter out None values and exceptions
+        cards = [
+            card for card in cards_results 
+            if card is not None and isinstance(card, dict)
+        ]
 
         if not cards:
             raise HTTPException(status_code=404, detail="Failed to cut cards from found sources")
@@ -339,192 +323,57 @@ async def search_by_goal(request: SearchRequest, authorization: Optional[str] = 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-# Keep the old endpoint for backward compatibility
-def extract_article_text(url: str) -> str:
-    """Extract text content from a URL (original implementation)."""
-    try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-        }
-        response = requests.get(url, headers=headers, timeout=30)
-        response.raise_for_status()
-        
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Remove script and style elements
-        for script in soup(["script", "style"]):
-            script.decompose()
-        
-        # Try to find main content
-        article = soup.find('article') or soup.find('main') or soup.find('div', class_=['article', 'content', 'post'])
-        
-        if article:
-            text = article.get_text(separator=' ', strip=True)
-        else:
-            # Fallback to body
-            text = soup.get_text(separator=' ', strip=True)
-        
-        # Clean up whitespace
-        text = ' '.join(text.split())
-        
-        return text
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {str(e)}")
-
-
-def perform_search(query: str) -> List[dict]:
+@lru_cache(maxsize=1000)
+def get_heuristic_credibility(url: str, title: str = "") -> dict:
     """
-    Performs an exhaustive search using multiple query variations,
-    collects all credible results, and sorts them by a heuristic score.
+    Enhanced credibility check using a tiered heuristic model.
+    Ranks sources by trustworthiness, filtering out blogs and low-quality content.
     """
-    import urllib.parse
-    #print(f"\n=== STARTING SEARCH FOR: '{query}' ===")
+    url_lower = url.lower()
 
-    try:
-        scrapingdog_key = get_scrapingdog_key()
-    except ValueError:
-        print("❌ ScrapingDog API key not available")
-        return []
-
-    query_variations = [
-        (query, "Original Query"),
-        (f"{query} study", "Query + 'study'"),
-        (f"{query} research", "Query + 'research'"),
-        (f"{query} analysis", "Query + 'analysis'"),
+    # Tier 0: Blocklist (Score 0.0)
+    blocklist = [
+        'wikipedia.org', 'reddit.com', 'twitter.com', 'x.com', 'facebook.com',
+        'quora.com', 'wordpress.com', 'blogger.com', 'forum'
     ]
-    all_results = []
-    MIN_CREDIBILITY_SCORE = 0.2 # Minimum score to even be considered
+    if any(x in url_lower for x in blocklist):
+        return {"score": 0.0, "type": "blocklist"}
 
-    for i, (q_variation, desc) in enumerate(query_variations, 1):
-        try:
-            #print(f"\n🔍 Searching ({i}/{len(query_variations)}): '{desc}'")
-            search_url = f"https://www.mojeek.com/search?q={urllib.parse.quote(q_variation)}&t=40"
-            encoded_target_url = urllib.parse.quote(search_url, safe=':/%')
-            scrape_url = f"https://api.scrapingdog.com/scrape?api_key={scrapingdog_key}&dynamic=false&url={encoded_target_url}"
-            
-            resp = requests.get(scrape_url, timeout=15)
-            #print(f"   ✅ ScrapingDog API response status: {resp.status_code}")
+    # Tier 4: Highest Quality - Academic & Government (Score 0.95)
+    if any(x in url_lower for x in ['.gov', 'jstor.org', 'nature.com', 'science.org', 'springer.com', 'rand.org', 'brookings.edu']):
+        return {"score": 0.95, "type": "academic_gov"}
+    if '.edu' in url_lower:
+        if any(x in url_lower for x in ['/blog/', 'blog.', '/students/', '/opinion/']):
+            return {"score": 0.3, "type": "edu_blog"}
+        return {"score": 0.9, "type": "edu_academic"}
 
-            if resp.status_code != 200:
-                print(f"   ❌ ScrapingDog API error: HTTP {resp.status_code}")
-                print(f"   Response: {resp.text[:200]}...")
-                continue
+    # Tier 3: Reputable News & Organizations (Score 0.75)
+    reputable_news = [
+        'reuters.com', 'apnews.com', 'bbc.com', 'nytimes.com', 'wsj.com',
+        'washingtonpost.com', 'theguardian.com', 'economist.com', 'npr.org',
+        'foreignaffairs.com', 'cfr.org'
+    ]
+    if any(x in url_lower for x in reputable_news):
+        if '/opinion/' in url_lower or 'blogs.' in url_lower:
+            return {"score": 0.4, "type": "reputable_opinion"}
+        return {"score": 0.75, "type": "reputable_news"}
 
-            soup = BeautifulSoup(resp.text, 'html.parser')
-            strategy_results = []
+    # Tier 1: Low Quality Indicators (Score 0.2)
+    if any(x in url_lower for x in ['/opinion/', '/blogs/', 'blog.']):
+        return {"score": 0.2, "type": "opinion_blog"}
 
-            search_items = []
+    # Tier 2: General Web (Default Score 0.5)
+    return {"score": 0.5, "type": "general_web"}
 
-            # Incredibly Sophisticated Parsing Algorithm
-            # We use a weighted scoring system to identify search results based on structural features
-            candidates = []
-            all_lis = soup.find_all('li')
-            
-            for li in all_lis:
-                score = 0
-                classes = li.get('class', [])
-                
-                # Feature 1: Has Heading 2 (Strong signal for result title)
-                h2 = li.find('h2')
-                if h2:
-                    score += 3
-                    # Feature 1b: H2 contains a link (Strongest signal)
-                    if h2.find('a'):
-                        score += 5
-
-                # Feature 2: Has URL display/breadcrumb (usually class 'ob')
-                if li.find('a', class_='ob'):
-                    score += 4
-                
-                # Feature 3: Has Snippet (paragraph with class 's' or just text)
-                if li.find('p', class_='s'):
-                    score += 3
-                
-                # Feature 4: Class name pattern (r1, r2, etc)
-                if isinstance(classes, str): classes = [classes]
-                if any(re.match(r'^r\d+$', c) for c in classes):
-                    score += 2
-
-                # Threshold: Needs to look like a result (Score >= 7 implies H2+Link+Something else)
-                if score >= 7:
-                    # Additional filters to exclude ads and navigation
-                    # 1. Must have an absolute URL (http/https)
-                    # 2. Must not be an ad link (e.g. /support/ads/)
-                    h2_elem = li.find('h2')
-                    link_elem = h2_elem.find('a') if h2_elem else li.find('a', class_='ob')
-                    href = link_elem.get('href') if link_elem else None
-                    
-                    if href and href.startswith('http'): 
-                        candidates.append(li)
-            
-            search_items = candidates[:15]
-            #print(f"   🎯 Found {len(search_items)} search results using sophisticated parsing")
-
-            for j, item in enumerate(search_items, 1):
-                # Robust extraction: Try H2 link first, then 'ob' link
-                h2 = item.find('h2')
-                title_link = h2.find('a') if h2 else None
-                ob_link = item.find('a', class_='ob')
-                
-                title_text = h2.get_text(strip=True) if h2 else "No Title"
-                href = None
-                
-                if title_link and title_link.get('href'):
-                    href = title_link.get('href')
-                elif ob_link and ob_link.get('href'):
-                    href = ob_link.get('href')
-
-                if href and h2:
-                    cred = get_heuristic_credibility(href, title_text)
-                    #print(f"     Result {j}: {title_text[:50]}...")
-                    #print(f"       URL: {href}")
-                    #print(f"       Credibility: {cred['score']} ({cred['type']})")
-
-                    if cred['score'] >= MIN_CREDIBILITY_SCORE:
-                        strategy_results.append({
-                            "title": title_text,
-                            "url": href,
-                            "score": cred['score']
-                        })
-                        #print(f"       ✅ ADDED - meets credibility threshold")
-                    #else:
-                        #print(f"       ❌ REJECTED - below threshold ({MIN_CREDIBILITY_SCORE})")
-
-            all_results.extend(strategy_results)
-
-        except Exception as e:
-            print(f"   ❌ Search variation '{desc}' failed with error: {e}")
-            import traceback
-            traceback.print_exc()
-            continue
-
-    if not all_results:
-        print(f"❌ EXHAUSTIVE SEARCH FAILED - no credible sources found for '{query}'")
-        return []
-
-    # De-duplicate results based on URL, keeping the one with the highest score (though they should be the same)
-    seen_urls = {}
-    for result in all_results:
-        if result['url'] not in seen_urls or result['score'] > seen_urls[result['url']]['score']:
-            seen_urls[result['url']] = result
-    
-    unique_results = list(seen_urls.values())
-    
-    # Sort all collected results globally by credibility score
-    sorted_results = sorted(unique_results, key=lambda x: x['score'], reverse=True)
-    
-    #print(f"\n✅ SUCCESS - Found {len(sorted_results)} unique, credible sources across all searches.")
-    return sorted_results
-
-def cut_card_with_ai(text: str, source_url: str, goal: str = "General evidence") -> dict:
+async def cut_card_with_ai_async(text: str, source_url: str, goal: str = "General evidence") -> dict:
     """
-    The ONLY place we use AI. Uses cheap model to format the card.
+    AI card formatting. Uses cheap model to format the card.
+    Async wrapper around synchronous OpenRouter call.
     """
     try:
         client = get_openrouter_client()
     except ValueError as e:
         print(f"Warning: {e}")
-        # Fallback if API key not available
         return {
             "tag": "Evidence Extracted",
             "cite": f"Source ({source_url})",
@@ -542,66 +391,238 @@ Format:
 }
 If no relevant evidence found, return error in tag."""
 
-    user = f"Goal: {goal}\nURL: {source_url}\nText: {text[:6000]}"  # Truncate to save tokens
+    max_chars = 4000  # Reduced from 6000 for faster processing
+    user = f"Goal: {goal}\nURL: {source_url}\nText: {text[:max_chars]}"
 
     try:
-        completion = client.chat.completions.create(
-            model=MODEL_CARD_CUTTER,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user}
-            ],
-            temperature=0.1,
-            max_tokens=300,
-            response_format={"type": "json_object"}
+        # Run blocking OpenRouter call in thread pool
+        completion = await asyncio.to_thread(
+            lambda: client.chat.completions.create(
+                model=MODEL_CARD_CUTTER,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user}
+                ],
+                temperature=0.1,
+                max_tokens=300,
+                response_format={"type": "json_object"}
+            )
         )
         return json.loads(completion.choices[0].message.content)
     except Exception as e:
         print(f"AI formatting error: {e}")
-        # Fallback if AI fails or returns bad JSON
         return {
             "tag": "Evidence Extracted",
             "cite": f"Source ({source_url})",
             "body": text[:500] + "..."
         }
 
-def get_heuristic_credibility(url: str, title: str = "") -> dict:
+
+async def process_single_url(article: dict, goal: str) -> Optional[dict]:
     """
-    Enhanced credibility check using a tiered heuristic model.
-    Ranks sources by trustworthiness, filtering out blogs and low-quality content.
+    Process a single URL: fetch, clean, and cut card.
+    Returns card dict or None if processing fails.
     """
-    url_lower = url.lower()
+    try:
+        # Fetch and clean
+        clean_text = await fetch_and_clean_url(article['url'])
+        
+        if not clean_text:
+            return None
+        
+        # Cut card with AI
+        card_data = await cut_card_with_ai_async(clean_text, article['url'], goal)
+        
+        return {
+            "tag": card_data.get("tag", "Extracted Evidence"),
+            "cite": card_data.get("cite", "Unknown Source"),
+            "body": card_data.get("body", clean_text[:500]),
+            "url": article['url'],
+            "credibility": get_heuristic_credibility(article['url'])['score'],
+            "source_title": article['title']
+        }
+    except Exception as e:
+        print(f"Skipping {article['url']}: {e}")
+        return None
 
-    # Tier 0: Blocklist (Score 0.0) - Excluded sources
-    blocklist = [
-        'wikipedia.org', 'reddit.com', 'twitter.com', 'x.com', 'facebook.com',
-        'quora.com', 'wordpress.com', 'blogger.com', 'forum'
+
+def perform_search(query: str) -> List[dict]:
+    """
+    Performs search using query variations, collects credible results, and sorts by score.
+    Optimized with reduced variations and early exit.
+    """
+    try:
+        scrapingdog_key = get_scrapingdog_key()
+    except ValueError:
+        print("ScrapingDog API key not available")
+        return []
+
+    # Reduced from 4 to 2 variations for faster search
+    query_variations = [
+        (query, "Original Query"),
+        (f"{query} research study", "Enhanced Query"),
     ]
-    if any(x in url_lower for x in blocklist):
-        return {"score": 0.0, "type": "blocklist"}
+    
+    all_results = []
+    MIN_CREDIBILITY_SCORE = 0.2
+    TARGET_RESULTS = 10  # Stop early if we have enough good results
 
-    # Tier 4: Highest Quality - Academic & Government (Score 0.95)
-    if any(x in url_lower for x in ['.gov', 'jstor.org', 'nature.com', 'science.org', 'springer.com', 'rand.org', 'brookings.edu']):
-        return {"score": 0.95, "type": "academic_gov"}
-    if '.edu' in url_lower:
-        if any(x in url_lower for x in ['/blog/', 'blog.', '/students/', '/opinion/']):
-             return {"score": 0.3, "type": "edu_blog"}
-        return {"score": 0.9, "type": "edu_academic"}
+    for i, (q_variation, desc) in enumerate(query_variations, 1):
+        try:
+            search_url = f"https://www.mojeek.com/search?q={urllib.parse.quote(q_variation)}&t=40"
+            encoded_target_url = urllib.parse.quote(search_url, safe=':/%')
+            scrape_url = f"https://api.scrapingdog.com/scrape?api_key={scrapingdog_key}&dynamic=false&url={encoded_target_url}"
+            
+            resp = requests.get(scrape_url, timeout=15)
 
-    # Tier 3: Reputable News & Organizations (Score 0.75)
-    reputable_news = [
-        'reuters.com', 'apnews.com', 'bbc.com', 'nytimes.com', 'wsj.com',
-        'washingtonpost.com', 'theguardian.com', 'economist.com', 'npr.org',
-        'foreignaffairs.com', 'cfr.org'
-    ]
-    if any(x in url_lower for x in reputable_news):
-        if '/opinion/' in url_lower or 'blogs.' in url_lower:
-             return {"score": 0.4, "type": "reputable_opinion"}
-        return {"score": 0.75, "type": "reputable_news"}
+            if resp.status_code != 200:
+                print(f"ScrapingDog API error: HTTP {resp.status_code}")
+                continue
 
-    # Tier 1: Low Quality Indicators (Score 0.2)
-    if any(x in url_lower for x in ['/opinion/', '/blogs/', 'blog.']):
-        return {"score": 0.2, "type": "opinion_blog"}
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            strategy_results = []
 
-    # Tier 2: General Web (Default Score 0.5)
-    return {"score": 0.5, "type": "general_web"}
+            # Parse search results
+            candidates = []
+            all_lis = soup.find_all('li')
+            
+            for li in all_lis:
+                score = 0
+                classes = li.get('class', [])
+                
+                h2 = li.find('h2')
+                if h2:
+                    score += 3
+                    if h2.find('a'):
+                        score += 5
+
+                if li.find('a', class_='ob'):
+                    score += 4
+                
+                if li.find('p', class_='s'):
+                    score += 3
+                
+                if isinstance(classes, str):
+                    classes = [classes]
+                if any(re.match(r'^r\d+$', c) for c in classes):
+                    score += 2
+
+                if score >= 7:
+                    h2_elem = li.find('h2')
+                    link_elem = h2_elem.find('a') if h2_elem else li.find('a', class_='ob')
+                    href = link_elem.get('href') if link_elem else None
+                    
+                    if href and href.startswith('http'): 
+                        candidates.append(li)
+            
+            search_items = candidates[:15]
+
+            for j, item in enumerate(search_items, 1):
+                h2 = item.find('h2')
+                title_link = h2.find('a') if h2 else None
+                ob_link = item.find('a', class_='ob')
+                
+                title_text = h2.get_text(strip=True) if h2 else "No Title"
+                href = None
+                
+                if title_link and title_link.get('href'):
+                    href = title_link.get('href')
+                elif ob_link and ob_link.get('href'):
+                    href = ob_link.get('href')
+
+                if href and h2:
+                    cred = get_heuristic_credibility(href, title_text)
+
+                    if cred['score'] >= MIN_CREDIBILITY_SCORE:
+                        strategy_results.append({
+                            "title": title_text,
+                            "url": href,
+                            "score": cred['score']
+                        })
+
+            all_results.extend(strategy_results)
+            
+            # Early exit if we have enough good results
+            if len(all_results) >= TARGET_RESULTS:
+                break
+
+        except Exception as e:
+            print(f"Search variation '{desc}' failed: {e}")
+            continue
+
+    if not all_results:
+        print(f"No credible sources found for '{query}'")
+        return []
+
+    # De-duplicate based on URL
+    seen_urls = {}
+    for result in all_results:
+        if result['url'] not in seen_urls or result['score'] > seen_urls[result['url']]['score']:
+            seen_urls[result['url']] = result
+    
+    unique_results = list(seen_urls.values())
+    sorted_results = sorted(unique_results, key=lambda x: x['score'], reverse=True)
+    
+    return sorted_results
+
+# Keep old endpoint for backward compatibility
+def extract_article_text(url: str) -> str:
+    """Extract text content from a URL (original implementation)."""
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        response = requests.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        for script in soup(["script", "style"]):
+            script.decompose()
+        
+        article = soup.find('article') or soup.find('main') or soup.find('div', class_=['article', 'content', 'post'])
+        
+        if article:
+            text = article.get_text(separator=' ', strip=True)
+        else:
+            text = soup.get_text(separator=' ', strip=True)
+        
+        text = ' '.join(text.split())
+        
+        return text
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {str(e)}")
+    
+async def summarize_to_main_claim(text: str) -> str:
+    """
+    Takes document text and returns a single main claim summary.
+    """
+    try:
+        client = get_openrouter_client()
+    except ValueError as e:
+        print(f"Warning: {e}")
+        return "Unable to generate summary - API key missing"
+
+    system = """You are a debate analyst. 
+Extract the single main claim or argument from the provided text.
+Output: One concise sentence (max 20 words) stating the core argument."""
+
+    max_chars = 5000  # Limit input size
+    user = f"Text: {text[:max_chars]}"
+
+    try:
+        completion = await asyncio.to_thread(
+            lambda: client.chat.completions.create(
+                model=MODEL_CARD_CUTTER,  # Or use a different model if preferred
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user}
+                ],
+                temperature=0.3,
+                max_tokens=50
+            )
+        )
+        return completion.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"AI summary error: {e}")
+        return "Error generating summary"

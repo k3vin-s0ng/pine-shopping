@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, List, ListOrdered, Download, FileText } from 'lucide-react';
 import { Button } from "./components/ui/button"
-import { Search, House} from "lucide-react"
+import { Search, House } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 export default function WordProcessor() {
@@ -11,9 +11,11 @@ export default function WordProcessor() {
   const [fontSize, setFontSize] = useState('16');
   const [fontFamily, setFontFamily] = useState('Arial');
   const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(false)
   const editorRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null)
-  const [url, setUrl] = useState("")
+  const [sources, setSources] = useState<any[]>([]);
+  const [isLoadingSources, setIsLoadingSources] = useState(false);
 
   useEffect(() => {
     editorRef.current?.focus();
@@ -36,7 +38,7 @@ export default function WordProcessor() {
     if (document.queryCommandState('insertUnorderedList')) formats.add('insertUnorderedList');
     if (document.queryCommandState('insertOrderedList')) formats.add('insertOrderedList');
     setActiveFormats(formats);
-    
+
   };
 
   const handleFontSizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -102,60 +104,59 @@ export default function WordProcessor() {
     return editorRef.current?.innerHTML || '';
   };
 
-  // Example function showing how to use the text
-  const analyzeDocument = () => {
-    const text = getDocumentText();
-    console.log('Document text:', text);
-    console.log('Word count:', text.trim().split(/\s+/).filter(w => w.length > 0).length);
-
-    // You can do anything with the text here:
-    // - Send to an API
-    // - Save to database
-    // - Analyze sentiment
-    // - Check grammar
-    // etc.
-  };
-
   const handleEvidence = async () => {
     setError(null)
-    try{
+    setLoading(true)
+    try {
       const apiUrl = process.env.NEXT_PUBLIC_EVIDENCE_EXTRACTION || "http://localhost:8000"
 
       const headers: HeadersInit = {
         "Content-Type": "application/json",
       }
 
-      let response = await fetch(apiUrl +"/cut-from-url", {
+      let response = await fetch(apiUrl + "/search-by-goal", {
         method: "POST",
         headers,
-        body: JSON.stringify({url: url.trim(), goal: "General evidence"}),
+        body: JSON.stringify({ goal: getDocumentText().trim() }),
       }).catch(() => null)
 
       if (!response || !response.ok) {
         const errorData = await response?.json().catch(() => ({ detail: "Unknown error" }))
-        throw new Error(errorData.detail || "HTTP error! status: "+response?.status)
+        throw new Error(errorData.detail || "HTTP error! status: " + response?.status)
       }
 
       const data = await response.json()
-    }catch (err){
-      setError(err instanceof Error? err.message : "An error occured with evidence extraction")
+      setSources(data.cards || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occured with evidence extraction")
+    } finally {
+      setLoading(false)
     }
   }
 
   return (
     <div className="flex flex-col h-screen">
       <header className="bg-white border-b p-4 flex itesm-center gap-4">
-        <button><House className = "h-4 w-4"/></button>
+        <button><House className="h-4 w-4" /></button>
         <input
-          type = "text"
-          placeholder = "Document Name"
-          className="min-w-30 flex-1 text-xl font-semibold"/>
+          type="text"
+          placeholder="Document Name"
+          className="min-w-30 flex-1 text-xl font-semibold" />
       </header>
       <div className="flex flex-row min-h-screen">
 
         {/* Sidebar */}
         <aside className="w-25 bg-gray-100 text-black flex flex-col items-center p-4">
-          <Button variant="outline" onClick={() => alert(getDocumentText())}>
+          <Button variant="outline" onClick={() => setSources([
+            {
+              tag: "Test source",
+              cite: "Author, 2024",
+              body: "This is test content",
+              url: "https://example.com",
+              credibility: 0.8,
+              source_title: "Test"
+            }
+          ])}>
             <Search className="h-4 w-4" />
           </Button>
         </aside>
@@ -311,6 +312,30 @@ export default function WordProcessor() {
             </div>
           </div>
         </main>
+        {/* Right sidebar - Sources */}
+        {sources.length > 0 && (
+          <aside className="w-80 bg-white/80 backdrop-blur-sm border-l border-gray-200 overflow-y-auto p-4">
+            <h3 className="font-semibold text-lg mb-4">Sources</h3>
+            {sources.map((source, index) => (
+              <div key={index} className="mb-4 p-3 bg-white rounded border border-gray-200 shadow-sm">
+                <h4 className="font-medium text-sm mb-1">{source.tag}</h4>
+                <p className="text-xs text-gray-600 mb-2">{source.cite}</p>
+                <p className="text-sm text-gray-700 mb-2">{source.body}</p>
+                <a
+                  href={source.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-600 hover:underline"
+                >
+                  View Source
+                </a>
+                <p className="text-xs text-gray-500 mt-1">
+                  Credibility: {(source.credibility * 100).toFixed(0)}%
+                </p>
+              </div>
+            ))}
+          </aside>
+        )}
       </div>
     </div>
 
