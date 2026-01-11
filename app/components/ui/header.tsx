@@ -10,9 +10,9 @@ export default function header() {
 
     return (
        <header className="bg-white border-b">
-            <div className="max-w-4xl mx-auto px-4 py-4">
+            <div className="max-w-4xl ml-30 px-4 py-4">
                 <div className="flex items-center justify-between">
-                    <Link href="/" className="flex items-center space-x-2">
+                    <Link href="/" className="flex items-left space-x-2">
                         <h1 className="text-2xl font-bold text-[#062244]">Sic<span className="text-[#006bc2]">ero</span></h1>
                     </Link>
                 </div>

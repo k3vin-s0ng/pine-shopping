@@ -3,6 +3,7 @@ Card Cutter Module - Optimized evidence extraction and formatting
 Philosophy: Python logic > Expensive API calls
 """
 
+from paperscraper.get_dumps import bioxriv, medrixv, chemrxiv
 from typing import List, Optional, Dict, Any
 import time
 import requests
