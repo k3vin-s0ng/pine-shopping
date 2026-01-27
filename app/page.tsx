@@ -15,6 +15,7 @@ export default function WordProcessor() {
   const [error, setError] = useState<string | null>(null)
   const [sources, setSources] = useState<any[]>([]);
   const [isLoadingSources, setIsLoadingSources] = useState(false);
+  const[isEmpty, setIsEmpty] = useState(false);
 
   useEffect(() => {
     editorRef.current?.focus();
@@ -110,6 +111,12 @@ export default function WordProcessor() {
       return;
     }
 
+    if(getDocumentText().trim() == ""){
+      setIsEmpty(true);
+      return;
+    }
+
+    setIsEmpty(false);
     setError(null);
     setIsLoadingSources(true);
 
@@ -310,9 +317,16 @@ export default function WordProcessor() {
           </div>
         </main>
         {/* Right sidebar - Sources */}
-        {(sources.length > 0 || isLoadingSources) && (
+        {(sources.length > 0 || isLoadingSources || isEmpty) && (
           <aside className="w-80 bg-white/80 backdrop-blur-sm border-l border-gray-200 overflow-y-auto p-4">
             <h3 className="font-semibold text-lg mb-4">Sources</h3>
+
+            {isEmpty && ( 
+              <div className="flex flex-col items-center justify-center py-8">
+              <Search className="h-10 w-10" />
+              <p className="text-gray-500 text-center">Hmmm you didn't seem to type anything</p>
+              </div>
+            )}
 
             {isLoadingSources && (
               <div className="flex flex-col items-center justify-center py-8">
