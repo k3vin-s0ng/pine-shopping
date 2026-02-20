@@ -1,23 +1,19 @@
-"use client"
-
-import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 
-export default function header() {
-    const router = useRouter()
-    // useSession can return null session if auth fails, which is fine
-
-    return (
-       <header className="bg-white border-b">
-            <div className="max-w-4xl ml-30 px-4 py-4">
-                <div className="flex items-center justify-between">
-                    <Link href="/" className="flex items-left space-x-2">
-                        <Image className="" src="/logo.png" width={32} height={32} alt="sicero logo" />
-                        <h1 className="text-2xl font-bold text-[#062244]">Sic<span className="text-[#006bc2]">ero</span></h1>
-                    </Link>
-                </div>
-            </div>
-        </header>
-    )
+export default function Header() {
+  return (
+    <header className="fixed top-0 left-0 right-0 h-[72px] bg-background border-b border-border z-50">
+      <div className="h-full max-w-[1440px] mx-auto px-4 md:px-8 lg:px-20 flex items-center justify-between">
+        <Link href="/" className="flex items-center gap-2">
+          <Image src="/logo.png" width={32} height={32} alt="Sicero logo" />
+          <span className="text-2xl font-semibold text-[#062244]">Sic<span className="text-[#006bc2]">ero</span></span>
+        </Link>
+        <div className="hidden md:flex gap-8 text-sm text-muted-foreground">
+          <button className="hover:text-foreground transition-colors">How it works</button>
+          <button className="hover:text-foreground transition-colors">About</button>
+        </div>
+      </div>
+    </header>
+  )
 }

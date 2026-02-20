@@ -1,362 +1,318 @@
-'use client';
+"use client";
 
-import { useState, useRef, useEffect } from 'react';
-import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, List, ListOrdered, Download, FileText } from 'lucide-react';
-import { Button } from "./components/ui/button"
-import { Search, House, Loader2} from "lucide-react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react";
+import Header from "./components/ui/header";
+import { InputBar } from "./components/InputBar";
+import { ExampleChip } from "./components/ExampleChip";
+import { FilterPill } from "./components/FilterPill";
+import { LoadingStepper } from "./components/LoadingStepper";
+import { ProductCard } from "./components/ProductCard";
+import { ClarifyModal } from "./components/ClarifyModal";
+import { EmptyState } from "./components/EmptyState";
+import { ErrorState } from "./components/ErrorState";
+import { CompareView } from "./components/CompareView";
+import { mockProducts, exampleQueries, Product } from "./data/mockProducts";
 
-export default function WordProcessor() {
-  const [content, setContent] = useState('');
-  const [fontSize, setFontSize] = useState('16');
-  const [fontFamily, setFontFamily] = useState('Arial');
-  const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
-  const editorRef = useRef<HTMLDivElement>(null);
-  const [error, setError] = useState<string | null>(null)
-  const [sources, setSources] = useState<any[]>([]);
-  const [isLoadingSources, setIsLoadingSources] = useState(false);
-  const[isEmpty, setIsEmpty] = useState(false);
+type AppView = "home" | "loading" | "clarify" | "results" | "compare" | "empty" | "error";
+
+export default function App() {
+  const [view, setView] = useState<AppView>("home");
+  const [query, setQuery] = useState("");
+  const [loadingStep, setLoadingStep] = useState(0);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [filters, setFilters] = useState<string[]>([]);
+  const [confidence] = useState<"Low" | "Medium" | "High">("High");
 
   useEffect(() => {
-    editorRef.current?.focus();
-  }, []);
+    if (view === "loading") {
+      const intervals = [1000, 1500, 1200];
+      let currentStep = 0;
 
-  const executeCommand = (command: string, value?: string) => {
-    document.execCommand(command, false, value);
-    editorRef.current?.focus();
-    updateActiveFormats();
-  };
-
-  const updateActiveFormats = () => {
-    const formats = new Set<string>();
-    if (document.queryCommandState('bold')) formats.add('bold');
-    if (document.queryCommandState('italic')) formats.add('italic');
-    if (document.queryCommandState('underline')) formats.add('underline');
-    if (document.queryCommandState('justifyLeft')) formats.add('justifyLeft');
-    if (document.queryCommandState('justifyCenter')) formats.add('justifyCenter');
-    if (document.queryCommandState('justifyRight')) formats.add('justifyRight');
-    if (document.queryCommandState('insertUnorderedList')) formats.add('insertUnorderedList');
-    if (document.queryCommandState('insertOrderedList')) formats.add('insertOrderedList');
-    setActiveFormats(formats);
-
-  };
-
-  const handleFontSizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const size = e.target.value;
-    setFontSize(size);
-    executeCommand('fontSize', '7');
-    const fontElements = editorRef.current?.querySelectorAll('font[size="7"]');
-    fontElements?.forEach(el => {
-      el.removeAttribute('size');
-      (el as HTMLElement).style.fontSize = size + 'px';
-    });
-  };
-
-  const handleFontFamilyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const family = e.target.value;
-    setFontFamily(family);
-    executeCommand('fontName', family);
-  };
-
-  const downloadAsHTML = () => {
-    const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Document</title>
-  <style>
-    body { font-family: ${fontFamily}; font-size: ${fontSize}px; padding: 40px; max-width: 8.5in; margin: 0 auto; }
-  </style>
-</head>
-<body>
-  ${editorRef.current?.innerHTML || ''}
-</body>
-</html>`;
-
-    const blob = new Blob([htmlContent], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'document.html';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const downloadAsText = () => {
-    const text = editorRef.current?.innerText || '';
-    const blob = new Blob([text], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'document.txt';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  // Helper function to get document text programmatically
-  const getDocumentText = () => {
-    return editorRef.current?.innerText || '';
-  };
-
-  // Helper function to get document HTML programmatically
-  const getDocumentHTML = () => {
-    return editorRef.current?.innerHTML || '';
-  };
-
-  const handleEvidence = async () => {
-    // Toggle: if sources exist, clear them and return
-    if (sources.length > 0) {
-      setSources([]);
-      return;
-    }
-
-    if(getDocumentText().trim() == ""){
-      setIsEmpty(true);
-      return;
-    }
-
-    setIsEmpty(false);
-    setError(null);
-    setIsLoadingSources(true);
-
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_EVIDENCE_EXTRACTION || "http://localhost:8000";
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
+      const progressLoading = () => {
+        if (currentStep < 3) {
+          setLoadingStep(currentStep);
+          currentStep++;
+          setTimeout(progressLoading, intervals[currentStep - 1] || 1000);
+        } else {
+          const shouldClarify = Math.random() > 0.7;
+          if (shouldClarify) {
+            setView("clarify");
+          } else {
+            showResults();
+          }
+        }
       };
 
-      let response = await fetch(apiUrl + "/search-by-goal", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ goal: getDocumentText().trim() }),
-      }).catch(() => null);
-
-      if (!response || !response.ok) {
-        const errorData = await response?.json().catch(() => ({ detail: "Unknown error" }));
-        throw new Error(errorData.detail || "HTTP error! status: " + response?.status);
-      }
-
-      const data = await response.json();
-      setSources(data.cards || []);
-
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred with evidence extraction");
-    } finally {
-      setIsLoadingSources(false);
+      progressLoading();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
+
+  const handleSearch = () => {
+    if (!query.trim()) return;
+
+    const extractedFilters: string[] = [];
+    if (query.toLowerCase().includes("prime")) extractedFilters.push("Prime");
+    const priceMatch = query.match(/under \$(\d+)/i);
+    if (priceMatch) extractedFilters.push(`≤ $${priceMatch[1]}`);
+    if (query.toLowerCase().includes("rating")) extractedFilters.push("≥ 4.2★");
+
+    setFilters(extractedFilters);
+    setView("loading");
+    setLoadingStep(0);
+  };
+
+  const showResults = () => {
+    setProducts(mockProducts);
+    setView("results");
+  };
+
+  const handleClarify = (budget: string, primeOnly: boolean) => {
+    const newFilters = [...filters];
+    if (budget) {
+      const existingBudgetIndex = newFilters.findIndex((f) => f.includes("$"));
+      if (existingBudgetIndex >= 0) {
+        newFilters[existingBudgetIndex] = `≤ ${budget}`;
+      } else {
+        newFilters.push(`≤ ${budget}`);
+      }
+    }
+    if (primeOnly && !newFilters.includes("Prime")) {
+      newFilters.push("Prime");
+    }
+    setFilters(newFilters);
+    showResults();
+  };
+
+  const handleEditQuery = () => {
+    setView("home");
+  };
+
+  const handleCancel = () => {
+    setView("home");
+    setLoadingStep(0);
+  };
+
+  const handleRelaxConstraint = (_constraint: string) => {
+    showResults();
+  };
+
+  const handleRetry = () => {
+    setView("loading");
+    setLoadingStep(0);
+  };
+
+  const removeFilter = (index: number) => {
+    setFilters(filters.filter((_, i) => i !== index));
   };
 
   return (
-    <div className="flex flex-col h-screen">
-      <header className="bg-white border-b p-4 flex items-center gap-4">
-        <button><House className="h-4 w-4" /></button>
-        <input
-          type="text"
-          placeholder="Document Name"
-          className="min-w-30 flex-1 text-xl font-semibold" />
-      </header>
-      <div className="flex flex-row min-h-screen">
+    <div className="min-h-screen bg-background">
+      <Header />
 
-        {/* Sidebar */}
-        <aside className="w-25 bg-gray-100 text-black flex flex-col items-center p-4">
-          <Button variant="outline" onClick={handleEvidence}>
-            <Search className="h-4 w-4" />
-          </Button>
-        </aside>
-        <main className="flex-1">
-          <div className="min-h-screen bg-white-100">
-            <div className="flex-1 bg-white flex flex-col">
-              {/* Toolbar */}
-              <div className="p-3 sticky top-0 z-10">
-                <div className="flex flex-wrap items-center gap-2">
-                  {/* Font controls */}
-                  <select
-                    value={fontFamily}
-                    onChange={handleFontFamilyChange}
-                    className="px-2 py-1 border border-gray-300 rounded text-sm"
-                  >
-                    <option value="Arial">Arial</option>
-                    <option value="Times New Roman">Times New Roman</option>
-                    <option value="Courier New">Courier New</option>
-                    <option value="Georgia">Georgia</option>
-                    <option value="Verdana">Verdana</option>
-                  </select>
+      {/* Home View */}
+      {view === "home" && (
+        <div className="min-h-screen flex flex-col items-center justify-center px-4 md:px-8 pt-[72px]">
+          <div className="max-w-[840px] w-full space-y-8">
+            <div className="text-center space-y-4">
+              <h1 className="text-3xl md:text-4xl font-semibold">
+                Describe what you want. Get the best 3 options.
+              </h1>
+              <p className="text-muted-foreground">
+                Amazon-only MVP. Fast shortlist + clear reasoning.
+              </p>
+            </div>
 
-                  <select
-                    value={fontSize}
-                    onChange={handleFontSizeChange}
-                    className="px-2 py-1 border border-gray-300 rounded text-sm w-16"
-                  >
-                    {[8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36].map(size => (
-                      <option key={size} value={size}>{size}</option>
-                    ))}
-                  </select>
+            <InputBar value={query} onChange={setQuery} onSearch={handleSearch} />
 
-                  <div className="w-px h-6 bg-gray-300 mx-1" />
+            <div className="flex flex-wrap gap-2 justify-center">
+              {exampleQueries.map((example, index) => (
+                <ExampleChip
+                  key={index}
+                  text={example}
+                  onClick={() => setQuery(example)}
+                />
+              ))}
+            </div>
 
-                  {/* Heading formats */}
-                  <select
-                    onChange={(e) => executeCommand('formatBlock', e.target.value)}
-                    className="px-2 py-1 border border-gray-300 rounded text-sm"
-                    defaultValue="p"
-                  >
-                    <option value="p">Normal</option>
-                    <option value="h1">Heading 1</option>
-                    <option value="h2">Heading 2</option>
-                    <option value="h3">Heading 3</option>
-                  </select>
+            <p className="text-center text-sm text-muted-foreground">
+              We don't buy for you — we shortlist and link out.
+            </p>
+          </div>
+        </div>
+      )}
 
-                  <div className="w-px h-6 bg-gray-300 mx-1" />
-
-                  {/* Text formatting */}
+      {/* Loading View */}
+      {view === "loading" && (
+        <div className="min-h-screen pt-[72px]">
+          <div className="max-w-[1200px] mx-auto px-4 md:px-8 py-8">
+            <div className="mb-8">
+              <InputBar value={query} onChange={setQuery} onSearch={() => {}} disabled />
+            </div>
+            <div className="flex flex-col items-center justify-center py-16">
+              <div className="w-full max-w-[560px] bg-card border border-border rounded-lg p-8 space-y-8">
+                <LoadingStepper currentStep={loadingStep} />
+                <div className="flex gap-3 justify-center">
                   <button
-                    onClick={() => executeCommand('bold')}
-                    className={`p-2 rounded ${activeFormats.has('bold') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
-                    title="Bold"
+                    onClick={handleEditQuery}
+                    className="px-6 h-10 bg-transparent text-foreground rounded-md hover:bg-accent transition-colors"
                   >
-                    <Bold size={18} />
+                    Edit query
                   </button>
                   <button
-                    onClick={() => executeCommand('italic')}
-                    className={`p-2 rounded ${activeFormats.has('italic') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
-                    title="Italic"
+                    onClick={handleCancel}
+                    className="px-6 h-10 bg-transparent text-foreground rounded-md hover:bg-accent transition-colors"
                   >
-                    <Italic size={18} />
-                  </button>
-                  <button
-                    onClick={() => executeCommand('underline')}
-                    className={`p-2 rounded ${activeFormats.has('underline') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
-                    title="Underline"
-                  >
-                    <Underline size={18} />
-                  </button>
-
-                  <div className="w-px h-6 bg-gray-300 mx-1" />
-
-                  {/* Alignment */}
-                  <button
-                    onClick={() => executeCommand('justifyLeft')}
-                    className={`p-2 rounded ${activeFormats.has('justifyLeft') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
-                    title="Align Left"
-                  >
-                    <AlignLeft size={18} />
-                  </button>
-                  <button
-                    onClick={() => executeCommand('justifyCenter')}
-                    className={`p-2 rounded ${activeFormats.has('justifyCenter') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
-                    title="Align Center"
-                  >
-                    <AlignCenter size={18} />
-                  </button>
-                  <button
-                    onClick={() => executeCommand('justifyRight')}
-                    className={`p-2 rounded ${activeFormats.has('justifyRight') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
-                    title="Align Right"
-                  >
-                    <AlignRight size={18} />
-                  </button>
-
-                  <div className="w-px h-6 bg-gray-300 mx-1" />
-
-                  {/* Lists */}
-                  <button
-                    onClick={() => executeCommand('insertUnorderedList')}
-                    className={`p-2 rounded ${activeFormats.has('insertUnorderedList') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
-                    title="Bullet List"
-                  >
-                    <List size={18} />
-                  </button>
-                  <button
-                    onClick={() => executeCommand('insertOrderedList')}
-                    className={`p-2 rounded ${activeFormats.has('insertOrderedList') ? 'bg-gray-300' : 'hover:bg-gray-200'}`}
-                    title="Numbered List"
-                  >
-                    <ListOrdered size={18} />
-                  </button>
-
-                  <div className="flex-1" />
-
-                  {/* Download options */}
-                  <button
-                    onClick={downloadAsText}
-                    className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-1 text-sm"
-                    title="Download as Text"
-                  >
-                    <FileText size={16} />
-                    .txt
-                  </button>
-                  <button
-                    onClick={downloadAsHTML}
-                    className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 flex items-center gap-1 text-sm"
-                    title="Download as HTML"
-                  >
-                    <Download size={16} />
-                    .html
+                    Cancel
                   </button>
                 </div>
-              </div>
-
-              {/* Editor */}
-              <div
-                ref={editorRef}
-                contentEditable
-                onInput={(e) => setContent(e.currentTarget.innerHTML)}
-                onMouseUp={updateActiveFormats}
-                onKeyUp={updateActiveFormats}
-                className="flex-1 p-16 focus:outline-none overflow-auto min-h-[600px]"
-                style={{
-                  fontFamily: fontFamily,
-                  fontSize: fontSize + 'px',
-                  lineHeight: '1.6'
-                }}
-                suppressContentEditableWarning
-              >
+                <p className="text-sm text-muted-foreground text-center">
+                  We'll show top 3 results with reasons. No hallucinated specs.
+                </p>
               </div>
             </div>
           </div>
-        </main>
-        {/* Right sidebar - Sources */}
-        {(sources.length > 0 || isLoadingSources || isEmpty) && (
-          <aside className="w-80 bg-white/80 backdrop-blur-sm border-l border-gray-200 overflow-y-auto p-4">
-            <h3 className="font-semibold text-lg mb-4">Sources</h3>
+        </div>
+      )}
 
-            {isEmpty && ( 
-              <div className="flex flex-col items-center justify-center py-8">
-              <Search className="h-10 w-10" />
-              <p className="text-gray-500 text-center">Hmmm you didn't seem to type anything</p>
+      {/* Clarify Modal */}
+      {view === "clarify" && (
+        <ClarifyModal
+          onContinue={handleClarify}
+          onSkip={showResults}
+          onClose={handleCancel}
+        />
+      )}
+
+      {/* Results View */}
+      {view === "results" && (
+        <div className="min-h-screen pt-[72px]">
+          <div className="sticky top-[72px] bg-background border-b border-border z-40">
+            <div className="max-w-[1200px] mx-auto px-4 md:px-8 py-4">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="flex-1">
+                  <InputBar value={query} onChange={setQuery} onSearch={handleSearch} />
+                </div>
               </div>
-            )}
+              {filters.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  {filters.map((filter, index) => (
+                    <FilterPill key={index} text={filter} onRemove={() => removeFilter(index)} />
+                  ))}
+                  <div className="flex gap-2 ml-4">
+                    <button className="px-3 py-1.5 text-sm text-primary hover:bg-primary/10 rounded-md transition-colors">
+                      Cheaper
+                    </button>
+                    <button className="px-3 py-1.5 text-sm text-primary hover:bg-primary/10 rounded-md transition-colors">
+                      Higher-rated
+                    </button>
+                    <button className="px-3 py-1.5 text-sm text-primary hover:bg-primary/10 rounded-md transition-colors">
+                      Faster shipping
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
 
-            {isLoadingSources && (
-              <div className="flex flex-col items-center justify-center py-8">
-                <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                <p className="text-gray-500">Loading sources...</p>
+          <div className="max-w-[1200px] mx-auto px-8 py-8">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              <div className="lg:col-span-8 space-y-6">
+                <h2 className="text-xl font-semibold">Top 3 matches</h2>
+                {products.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    onCompare={() => setView("compare")}
+                  />
+                ))}
               </div>
-            )}
 
-            {!isLoadingSources && sources.map((source, index) => (
-              <div key={index} className="mb-4 p-3 bg-white rounded border border-gray-200 shadow-sm">
-                <h4 className="font-medium text-sm mb-1">{source.tag}</h4>
-                <p className="text-xs text-gray-600 mb-2">{source.cite}</p>
-                <p className="text-sm text-gray-700 mb-2">{source.body}</p>
-                <a
-                  href={source.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-blue-600 hover:underline"
-                >
-                  View Source
-                </a>
-
-                <p className="text-xs text-gray-500 mt-1">
-                  Credibility: {(source.credibility * 100).toFixed(0)}%
-                </p>
+              <div className="lg:col-span-4">
+                <div className="lg:sticky lg:top-[200px]">
+                  <div className="bg-card border border-border rounded-lg p-6 space-y-4">
+                    <h3 className="font-semibold">Best pick for you</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {products[0]?.title.slice(0, 50)}… offers the best combination of
+                      features, price, and verified quality for your needs.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">Confidence:</span>
+                      <span
+                        className={`px-2 py-1 rounded text-xs font-semibold ${
+                          confidence === "High"
+                            ? "bg-green-100 text-green-800"
+                            : confidence === "Medium"
+                            ? "bg-yellow-100 text-yellow-800"
+                            : "bg-red-100 text-red-800"
+                        }`}
+                      >
+                        {confidence}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setView("compare")}
+                      className="w-full px-6 h-10 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                    >
+                      Compare all 3
+                    </button>
+                    <button className="w-full px-6 h-10 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 transition-colors">
+                      Relax constraints
+                    </button>
+                  </div>
+                </div>
               </div>
-            ))}
-          </aside>
-        )}
-      </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Compare View */}
+      {view === "compare" && (
+        <CompareView products={products} onBack={() => setView("results")} />
+      )}
+
+      {/* Empty State */}
+      {view === "empty" && (
+        <div className="min-h-screen pt-[72px]">
+          <div className="max-w-[1200px] mx-auto px-4 md:px-8 py-8">
+            <div className="mb-8">
+              <InputBar value={query} onChange={setQuery} onSearch={handleSearch} />
+            </div>
+            <EmptyState
+              onRelaxConstraint={handleRelaxConstraint}
+              relaxOptions={[
+                "Increase budget to $150",
+                "Allow non-Prime",
+                "Lower min rating to 4.0",
+                "Expand category",
+              ]}
+            />
+            <div className="space-y-6 mt-8">
+              <h3 className="text-lg font-semibold">Closest matches</h3>
+              {products.slice(0, 3).map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  onCompare={() => setView("compare")}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error State */}
+      {view === "error" && (
+        <div className="min-h-screen pt-[72px]">
+          <div className="max-w-[1200px] mx-auto px-4 md:px-8 py-8">
+            <div className="mb-8">
+              <InputBar value={query} onChange={setQuery} onSearch={handleSearch} />
+            </div>
+            <ErrorState onRetry={handleRetry} onEditQuery={handleEditQuery} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
