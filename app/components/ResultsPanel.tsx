@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Product } from "@/app/lib/products";
-import ProductCard from "./ProductCard";
+import ProductCard from "./market";
 
 interface ResultsPanelProps {
   products: Product[];
