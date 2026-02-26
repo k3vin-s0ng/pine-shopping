@@ -9,7 +9,7 @@ import VoiceModal from "@/app/components/VoiceModal";
 import Hero from "@/app/components/Hero";
 import { TrustBar, HowSection, FeaturesSection, CategoriesSection, TestimonialsSection, CTASection, Footer } from "@/app/components/Sections";
 import ChatPanel from "@/app/components/ChatPanel";
-import ResultsPanel from "@/app/components/Resultspanel";
+import ResultsPanel from "@/app/components/ResultsPanel"
 import { useChat } from "@/app/lib/useChat";
 
 function SiceroApp() {

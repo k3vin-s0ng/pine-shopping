@@ -1,7 +1,7 @@
 "use client";
 
 import ChatPanel from "./ChatPanel";
-import ResultsPanel from "./Resultspanel";
+import ResultsPanel from "./ResultsPanel";
 import { useChat } from "@/app/lib/useChat";
 import { Product } from "@/app/lib/products";
 

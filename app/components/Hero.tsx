@@ -80,7 +80,7 @@ export default function Hero({ onGetStarted }: HeroProps) {
       <div className="flex gap-3.5 items-center relative">
         <button
           onClick={() => scrollTo("marketplace")}
-          className="px-[34px] py-[15px] text-base rounded-xl font-semibold transition-all font-sans"
+          className="px-[34px] py-[15px] text-base rounded-full font-semibold transition-all font-sans"
           style={{ background: "linear-gradient(135deg, var(--gold), #A8732E)", color: "#080808", border: "none", cursor: "pointer" }}
           onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 20px rgba(201,168,76,0.35)"; }}
           onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.transform = ""; (e.currentTarget as HTMLElement).style.boxShadow = ""; }}
@@ -89,7 +89,7 @@ export default function Hero({ onGetStarted }: HeroProps) {
         </button>
         <button
           onClick={() => scrollTo("how")}
-          className="px-[34px] py-[15px] text-base rounded-xl font-medium transition-all font-sans"
+          className="px-[34px] py-[15px] text-base rounded-full font-medium transition-all font-sans"
           style={{ border: "1px solid var(--border-subtle)", background: "transparent", color: "var(--text-secondary)", cursor: "pointer" }}
           onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--gold)"; (e.currentTarget as HTMLElement).style.color = "var(--gold)"; }}
           onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border-subtle)"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; }}
