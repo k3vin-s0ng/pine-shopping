@@ -55,8 +55,11 @@ export default function Hero({ onGetStarted }: HeroProps) {
           textTransform: "uppercase",
         }}
       >
-        <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "var(--gold)" }} />
-        AI-Powered · No More Endless Scrolling
+        <div className="flex justify-center mt-6">
+          <div className="px-4 py-1.5 rounded-full bg-neutral-100 text-sm text-neutral-700 border border-neutral-200 shadow-sm">
+            AI Powered <span className="font-medium">No More Endless Scrolling</span>
+            </div>
+          </div>
       </div>
 
       {/* Heading */}

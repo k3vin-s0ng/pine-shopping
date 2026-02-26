@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef } from "react";
 import { AuthProvider, useAuth } from "@/app/lib/auth";
 import { Product } from "@/app/lib/products";
-import Navbar from "@/app/components/Navbar";
+import Navbar from "@/app/components/header";
 import AuthModal from "@/app/components/AuthModal";
 import VoiceModal from "@/app/components/VoiceModal";
 import Hero from "@/app/components/Hero";
