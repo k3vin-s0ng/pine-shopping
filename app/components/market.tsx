@@ -9,11 +9,16 @@ interface ProductCardProps {
 
 export default function ProductCard({ product, onViewDetails }: ProductCardProps) {
   return (
-    <div
-      className="flex gap-3.5 p-3.5 rounded-[14px] cursor-pointer transition-all duration-[220ms] msg-in"
+    <a
+      href={product.link}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex gap-3.5 p-3.5 rounded-[14px] cursor-pointer transition-all duration-[220ms] msg-in no-underline"
       style={{
         background: "var(--bg-card)",
         border: "1px solid var(--border-subtle)",
+        color: "inherit",
+        display: "flex",
       }}
       onMouseEnter={(e) => {
         const el = e.currentTarget as HTMLElement;
@@ -111,6 +116,6 @@ export default function ProductCard({ product, onViewDetails }: ProductCardProps
           </button>
         </div>
       </div>
-    </div>
+    </a>
   );
 }

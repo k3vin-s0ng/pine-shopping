@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { DB, INTENTS, Product } from "./products";
+import { searchProducts } from "./serpapi";
 
 export interface Message {
   id: string;
@@ -44,7 +45,7 @@ export function useChat() {
   }, []);
 
   const processMessage = useCallback(
-    (text: string) => {
+    async (text: string) => {
       const lo = text.toLowerCase();
       const count = msgCount + 1;
       setMsgCount(count);
@@ -53,61 +54,62 @@ export function useChat() {
 
       addMessage({ role: "user", content: text, time: now() });
 
-      setTimeout(() => {
+      const hasCheaper =
+        /cheaper|budget|under \$|less than|affordable|lower price|save money|discount/i.test(text);
+      const hasMore =
+        /more|show more|other|different|alternatives|options|else/i.test(text);
+      const hasBudget = parseBudget(text);
+
+      // Refinement on existing results (no new search needed)
+      if ((hasCheaper || hasMore || hasBudget) && allProducts.length > 0) {
+        let filtered = [...allProducts];
+        if (hasCheaper) {
+          const minPrice = Math.min(...filtered.map((p) => p.num));
+          filtered = filtered.filter((p) => p.num <= minPrice * 0.85);
+          if (!filtered.length)
+            filtered = allProducts.slice().sort((a, b) => a.num - b.num).slice(0, 2);
+        }
+        if (hasBudget) filtered = filtered.filter((p) => p.num <= hasBudget);
+        if (!filtered.length)
+          filtered = allProducts.slice().sort((a, b) => a.num - b.num).slice(0, 3);
+
+        const ack = hasCheaper
+          ? "Here are the more budget-friendly options from your results 👇"
+          : hasBudget
+          ? `Filtered to options under $${hasBudget}:`
+          : hasMore
+          ? "Here are more alternatives for you:"
+          : "Updated picks based on your preference:";
+
+        addMessage({ role: "ai", content: ack, html: false, time: now() });
+        setAllProducts(filtered);
+        setProducts(filtered.slice(0, 3));
         setIsTyping(false);
         setIsSearching(false);
+        return;
+      }
 
-        const hasCheaper =
-          /cheaper|budget|under \$|less than|affordable|lower price|save money|discount/i.test(text);
-        const hasMore =
-          /more|show more|other|different|alternatives|options|else/i.test(text);
-        const hasBudget = parseBudget(text);
+      // Find intent for acknowledgment message
+      const hit = INTENTS.find((r) => r.kw.some((k) => lo.includes(k)));
+      const ack = hit
+        ? hit.ack
+        : "Searching for the best matches — one moment 🔍";
+      addMessage({ role: "ai", content: ack, html: false, time: now() });
 
-        // Refinement on existing
-        if ((hasCheaper || hasMore || hasBudget) && allProducts.length > 0) {
-          let filtered = [...allProducts];
-          if (hasCheaper) {
-            const minPrice = Math.min(...filtered.map((p) => p.num));
-            filtered = filtered.filter((p) => p.num <= minPrice * 0.85);
-            if (!filtered.length)
-              filtered = allProducts.slice().sort((a, b) => a.num - b.num).slice(0, 2);
-          }
-          if (hasBudget) filtered = filtered.filter((p) => p.num <= hasBudget);
-          if (!filtered.length)
-            filtered = allProducts.slice().sort((a, b) => a.num - b.num).slice(0, 3);
+      try {
+        const results = await searchProducts({ query: text, maxResults: 10 });
+        let filtered = results;
+        if (hasBudget) filtered = filtered.filter((p) => p.num <= hasBudget);
+        if (!filtered.length) filtered = results;
 
-          const ack = hasCheaper
-            ? "Here are the more budget-friendly options from your results 👇"
-            : hasBudget
-            ? `Filtered to options under $${hasBudget}:`
-            : hasMore
-            ? "Here are more alternatives for you:"
-            : "Updated picks based on your preference:";
-
-          addMessage({ role: "ai", content: ack, html: false, time: now() });
-          setAllProducts(filtered);
-          setProducts(filtered.slice(0, 3));
-          return;
-        }
-
-        // Match intent
-        let hit = INTENTS.find((r) => r.kw.some((k) => lo.includes(k)));
+        setAllProducts(filtered);
+        setProducts(filtered.slice(0, 3));
 
         if (hit) {
-          const prods = DB[hit.db] || [];
-          let filtered = [...prods];
-          if (hasBudget) filtered = filtered.filter((p) => p.num <= hasBudget);
-          if (!filtered.length) filtered = prods;
-
-          setAllProducts(filtered);
-          setProducts(filtered.slice(0, 3));
-
-          addMessage({ role: "ai", content: hit.ack, html: false, time: now() });
-
           const words = text.trim().split(/\s+/).length;
           if (words <= 2 && !hasBudget && count <= 5 && hit.clarify.length) {
             setTimeout(() => {
-              const q = hit!.clarify[Math.floor(Math.random() * hit!.clarify.length)];
+              const q = hit.clarify[Math.floor(Math.random() * hit.clarify.length)];
               addMessage({
                 role: "ai",
                 content: `Quick question to sharpen these further — ${q}`,
@@ -116,21 +118,23 @@ export function useChat() {
               });
             }, 1200);
           }
-        } else {
-          // Fallback
-          const keys = Object.keys(DB);
-          const fallback = DB[keys[count % keys.length]];
-          setAllProducts(fallback);
-          setProducts(fallback.slice(0, 3));
-          addMessage({
-            role: "ai",
-            content:
-              "Hmm, I want to make sure I find exactly what you're after. Could you tell me a bit more — what category is this in, and roughly what's your budget? In the meantime, here are some popular picks:",
-            html: false,
-            time: now(),
-          });
         }
-      }, 500 + Math.random() * 350);
+      } catch {
+        // Fallback to mock data if SerpAPI fails
+        const keys = Object.keys(DB);
+        const fallback = hit ? DB[hit.db] : DB[keys[count % keys.length]];
+        setAllProducts(fallback);
+        setProducts(fallback.slice(0, 3));
+        addMessage({
+          role: "ai",
+          content: "Here are some popular picks while our search catches up:",
+          html: false,
+          time: now(),
+        });
+      } finally {
+        setIsTyping(false);
+        setIsSearching(false);
+      }
     },
     [msgCount, allProducts, addMessage]
   );
