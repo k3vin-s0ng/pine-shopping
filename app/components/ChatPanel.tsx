@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import AvatarSVG from "./AvatarSVG";
+import AvatarSVG from "./avatarsvg";
 import { Message } from "@/app/lib/useChat"
 
 interface ChatPanelProps {
