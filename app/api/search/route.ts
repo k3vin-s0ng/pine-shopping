@@ -1,27 +1,80 @@
 import { NextRequest, NextResponse } from "next/server";
+import { extractIntent } from "@/app/lib/intentExtraction";
+import { Product } from "@/app/lib/products";
 
-export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const query = searchParams.get("q");
-  const num = searchParams.get("num") || "10";
+const SERP_API_KEY = process.env.SERP_API_KEY;
 
-  if (!query) {
-    return NextResponse.json({ error: "Query required" }, { status: 400 });
-  }
+function formatReviews(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return String(n);
+}
 
-  const apiKey = process.env.SERP_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: "SERP_API_KEY not configured" }, { status: 500 });
-  }
+function transformProducts(items: any[]): Product[] {
+  return (items || []).map((item: any, i: number) => ({
+    name: item.title || "Unknown Product",
+    cat: item.source || "Shopping",
+    desc: item.snippet || `Sold by ${item.source || "online store"}${item.delivery ? ` · ${item.delivery}` : ""}`,
+    price: item.price || "$0",
+    num: typeof item.extracted_price === "number" ? item.extracted_price : 0,
+    rating: typeof item.rating === "number" ? String(item.rating) : "0",
+    reviews: typeof item.reviews === "number" ? formatReviews(item.reviews) : "0",
+    match: `${Math.max(60, 99 - i * 3)}%`,
+    img: item.thumbnail || "",
+    // 'link' in SerpAPI Google Shopping is the direct retailer URL
+    link: item.link || item.product_link || "#",
+  }));
+}
 
+async function callSerpAPI(searchQuery: string): Promise<any[]> {
   const url = new URL("https://serpapi.com/search");
   url.searchParams.set("engine", "google_shopping");
-  url.searchParams.set("q", query);
-  url.searchParams.set("api_key", apiKey);
-  url.searchParams.set("num", num);
+  url.searchParams.set("q", searchQuery);
+  url.searchParams.set("api_key", SERP_API_KEY!);
+  url.searchParams.set("num", "15");
 
+  console.log("[SerpAPI] Querying:", searchQuery);
   const response = await fetch(url.toString());
   const data = await response.json();
 
-  return NextResponse.json(data);
+  if (data.error) {
+    console.error("[SerpAPI] Error:", data.error);
+    throw new Error(data.error);
+  }
+
+  console.log("[SerpAPI] Got", data.shopping_results?.length ?? 0, "results");
+  return data.shopping_results || [];
+}
+
+// POST: LLM intent extraction → refined SerpAPI query → filtered products
+export async function POST(request: NextRequest) {
+  const { query } = await request.json();
+
+  if (!query) return NextResponse.json({ error: "Query required" }, { status: 400 });
+  if (!SERP_API_KEY) return NextResponse.json({ error: "SERP_API_KEY not configured" }, { status: 500 });
+
+  // Step 1: Extract intent (falls back to raw query on failure)
+  const intent = await extractIntent(query);
+
+  // Step 2: Build refined search query
+  let searchQuery = intent.product;
+  if (intent.brand) searchQuery = `${intent.brand} ${searchQuery}`;
+  if (intent.maxPrice) searchQuery += ` under $${intent.maxPrice}`;
+
+  // Step 3: Call SerpAPI
+  let rawItems: any[];
+  try {
+    rawItems = await callSerpAPI(searchQuery);
+  } catch (err) {
+    console.error("[POST /api/search] SerpAPI failed:", err);
+    return NextResponse.json({ error: "Search service unavailable", products: [], intent }, { status: 502 });
+  }
+
+  // Step 4: Transform and filter
+  let products = transformProducts(rawItems);
+
+  if (intent.maxPrice) products = products.filter((p) => p.num > 0 && p.num <= intent.maxPrice!);
+  if (intent.minPrice) products = products.filter((p) => p.num >= intent.minPrice!);
+
+  console.log("[POST /api/search] Returning", products.length, "products for:", searchQuery);
+  return NextResponse.json({ products, intent });
 }

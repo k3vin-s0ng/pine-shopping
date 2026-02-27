@@ -97,7 +97,7 @@ export function useChat() {
       addMessage({ role: "ai", content: ack, html: false, time: now() });
 
       try {
-        const results = await searchProducts({ query: text, maxResults: 10 });
+        const results = await searchProducts(text);
         let filtered = results;
         if (hasBudget) filtered = filtered.filter((p) => p.num <= hasBudget);
         if (!filtered.length) filtered = results;
