@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 
 // ── TRUST BAR ──
 export function TrustBar() {
@@ -21,13 +21,13 @@ export function TrustBar() {
       }}
     >
       {items.map((item, i) => (
-        <div key={item.label} className="flex items-center gap-16">
+        <React.Fragment key={item.label}>
           <div className="flex flex-col items-center gap-1">
             <div className="font-display text-[28px] font-bold leading-none" style={{ color: "var(--gold)" }}>{item.num}</div>
             <div className="text-[11px] uppercase tracking-[1px]" style={{ color: "var(--text-muted)" }}>{item.label}</div>
           </div>
           {i < items.length - 1 && <div className="w-px h-11" style={{ background: "var(--border-subtle)" }} />}
-        </div>
+        </React.Fragment>
       ))}
     </div>
   );
@@ -153,7 +153,7 @@ export function CategoriesSection({ onCategoryClick }: { onCategoryClick: (q: st
     <section id="categories" className="py-[110px] px-10">
       <SectionHead label="Browse by Category" title={<>Everything You <span className="grad-text">Could Need</span></>} sub="From cutting-edge tech to everyday essentials, Sicero has every category covered." />
       <div className="grid grid-cols-6 gap-3.5 max-w-[1140px] mx-auto">
-        {CATS.map((cat, i) => {
+        {CATS.map((cat) => {
           const ref = useReveal();
           return (
             <div
@@ -201,7 +201,7 @@ export function TestimonialsSection() {
       style={{ background: "var(--bg-secondary)", borderTop: "1px solid var(--border-subtle)", borderBottom: "1px solid var(--border-subtle)" }}
     >
       <SectionHead label="Testimonials" title={<>Loved by <span className="grad-text">Thousands</span></>} sub="Real people. Real results." />
-      <div className="grid grid-cols-3 gap-5.5 max-w-[1080px] mx-auto">
+      <div className="grid grid-cols-3 gap-[22px] max-w-[1080px] mx-auto">
         {tests.map((t, i) => {
           const ref = useReveal();
           return (
@@ -246,7 +246,7 @@ export function TestimonialsSection() {
 }
 
 // ── CTA ──
-export function CTASection({ onGetStarted }: { onGetStarted: () => void }) {
+export function CTASection({ onGetStarted: _onGetStarted }: { onGetStarted: () => void }) {
   return (
     <section className="py-[130px] px-10 text-center relative overflow-hidden">
       <div

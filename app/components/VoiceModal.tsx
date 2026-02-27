@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import AvatarSVG from "./avatarsvg";
+import AvatarSVG from "./AvatarSVG";
 
 interface VoiceModalProps {
   open: boolean;

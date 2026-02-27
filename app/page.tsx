@@ -4,12 +4,12 @@ import { useState, useCallback, useRef } from "react";
 import { AuthProvider, useAuth } from "@/app/lib/auth";
 import { Product } from "@/app/lib/products";
 import Navbar from "@/app/components/header";
-import AuthModal from "@/app/components/authmodal";
-import VoiceModal from "@/app/components/voicemodal";
-import Hero from "@/app/components/hero";
-import { TrustBar, HowSection, FeaturesSection, CategoriesSection, TestimonialsSection, CTASection, Footer } from "@/app/components/sections";
-import ChatPanel from "@/app/components/chatpanel";
-import ResultsPanel from "@/app/components/resultspanel"
+import AuthModal from "@/app/components/AuthModal";
+import VoiceModal from "@/app/components/VoiceModal";
+import Hero from "@/app/components/Hero";
+import { TrustBar, HowSection, FeaturesSection, CategoriesSection, TestimonialsSection, CTASection, Footer } from "@/app/components/Sections";
+import ChatPanel from "@/app/components/ChatPanel";
+import ResultsPanel from "@/app/components/ResultsPanel"
 import { useChat } from "@/app/lib/useChat";
 
 function SiceroApp() {
@@ -93,7 +93,7 @@ function SiceroApp() {
               Describe exactly what you want. Our AI listens, understands, and delivers real products with real buying links — instantly.
             </p>
           </div>
-          <div className="grid gap-5 min-h-[700px]" style={{ gridTemplateColumns: "1fr 1fr" }}>
+          <div className="grid gap-[22px] min-h-[700px]" style={{ gridTemplateColumns: "1fr 1fr" }}>
             <ChatPanel
               messages={messages}
               isTyping={isTyping}

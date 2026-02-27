@@ -22,10 +22,10 @@ export default function Navbar({ onOpenAuth }: NavbarProps) {
         borderBottom: "1px solid var(--border-subtle)",
       }}
     >
-      <div className="max-w-7xl mx-auto px-[60px] py-[18px] flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-[40px] py-[18px] flex items-center justify-between">
 
         {/* Logo */}
-        <a href="#" className="flex items-center gap-2.5 no-underline">
+        <a href="#" className="flex items-center gap-[14px] no-underline">
           <div
             className="w-[38px] h-[38px] rounded-[10px] flex items-center justify-center text-white text-[17px]"
             style={{
@@ -41,7 +41,7 @@ export default function Navbar({ onOpenAuth }: NavbarProps) {
         </a>
 
         {/* Links */}
-        <ul className="flex gap-9 list-none">
+        <ul className="flex gap-16 list-none">
           {[
             { label: "How It Works", id: "how" },
             { label: "Categories", id: "categories" },
@@ -83,7 +83,7 @@ export default function Navbar({ onOpenAuth }: NavbarProps) {
             <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>▾</span>
           </button>
         ) : (
-          <div className="flex gap-2.5 items-center">
+          <div className="flex gap-4 items-center">
             <button
               onClick={() => onOpenAuth("signin")}
               className="px-5 py-2 rounded-lg text-sm font-medium transition-all"
@@ -95,7 +95,7 @@ export default function Navbar({ onOpenAuth }: NavbarProps) {
             </button>
             <button
               onClick={() => onOpenAuth("signup")}
-              className="px-[22px] py-2 rounded-lg text-sm font-semibold transition-all"
+              className="px-[22px] py-2 rounded-full text-sm font-bold transition-all"
               style={{ background: "linear-gradient(135deg, var(--gold), #A8732E)", color: "#080808", border: "none", cursor: "pointer" }}
               onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 20px rgba(201,168,76,0.35)"; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.transform = ""; (e.currentTarget as HTMLElement).style.boxShadow = ""; }}

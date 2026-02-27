@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import AvatarSVG from "./avatarsvg";
+import AvatarSVG from "./AvatarSVG";
 import { Message } from "@/app/lib/useChat"
 
 interface ChatPanelProps {
@@ -34,8 +34,10 @@ export default function ChatPanel({ messages, isTyping, onSend, onClear, onOpenV
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 

@@ -44,7 +44,7 @@ export default function Hero({ onGetStarted }: HeroProps) {
 
       {/* Badge */}
       <div
-        className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-7 relative"
+        className="inline-flex items-center gap-2 rounded-full mb-7 relative"
         style={{
           border: "1px solid var(--border)",
           background: "var(--gold-dim)",
@@ -53,18 +53,15 @@ export default function Hero({ onGetStarted }: HeroProps) {
           fontWeight: 600,
           letterSpacing: "1px",
           textTransform: "uppercase",
+          padding: "10px 24px",
         }}
       >
-        <div className="flex justify-center mt-6">
-          <div className="px-4 py-1.5 rounded-full bg-neutral-100 text-sm text-neutral-700 border border-neutral-200 shadow-sm">
-            AI Powered <span className="font-medium">No More Endless Scrolling</span>
-            </div>
-          </div>
+        ✦ AI Powered · No More Endless Scrolling
       </div>
 
       {/* Heading */}
       <h1
-        className="font-display font-bold leading-[1.08] max-w-[820px] mb-6 relative"
+        className="font-display font-bold leading-[1.08] max-w-[820px] mb-[14px] relative"
         style={{ fontSize: "clamp(44px, 6.5vw, 84px)" }}
       >
         The Marketplace<br />
@@ -102,7 +99,7 @@ export default function Hero({ onGetStarted }: HeroProps) {
       </div>
 
       {/* Scroll indicator */}
-      <div className="relative mt-20 flex flex-col items-center gap-2">
+      <div className="relative mt-[90px] flex flex-col items-center gap-2">
         <div className="scroll-line" />
         <span className="text-[10px] tracking-[2px] uppercase" style={{ color: "var(--text-muted)" }}>Scroll to explore</span>
       </div>
