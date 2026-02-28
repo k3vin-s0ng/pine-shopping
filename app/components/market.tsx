@@ -7,7 +7,7 @@ interface ProductCardProps {
   onViewDetails?: (product: Product) => void;
 }
 
-export default function ProductCard({ product, onViewDetails }: ProductCardProps) {
+export default function ProductCard({ product }: ProductCardProps) {
   return (
     <a
       href={product.link}
@@ -94,27 +94,6 @@ export default function ProductCard({ product, onViewDetails }: ProductCardProps
           </div>
         </div>
 
-        {/* Buttons */}
-        <div className="flex gap-1.5 mt-2">
-          <button
-            onClick={() => window.open(product.link, "_blank", "noopener")}
-            className="px-3 py-1.5 rounded-[7px] text-[10.5px] font-bold transition-all font-sans"
-            style={{ background: "linear-gradient(135deg, var(--gold), #9A6A2A)", color: "#060606", border: "none", cursor: "pointer" }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 3px 12px rgba(201,168,76,0.3)"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.transform = ""; (e.currentTarget as HTMLElement).style.boxShadow = ""; }}
-          >
-            Buy Now →
-          </button>
-          <button
-            onClick={() => onViewDetails?.(product)}
-            className="px-3 py-1.5 rounded-[7px] text-[10.5px] font-semibold transition-all font-sans"
-            style={{ border: "1px solid var(--border)", background: "transparent", color: "var(--gold)", cursor: "pointer" }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "var(--gold-dim)")}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "transparent")}
-          >
-            Details
-          </button>
-        </div>
       </div>
     </a>
   );
