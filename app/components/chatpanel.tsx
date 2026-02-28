@@ -80,6 +80,9 @@ export default function ChatPanel({ messages, isTyping, onSend, onClear, onOpenV
       };
       recognitionRef.current = r;
       r.start();
+      setTimeout(() => {
+        r.stop();
+      }, 8000);
     } else {
       recognitionRef.current?.stop();
     }
