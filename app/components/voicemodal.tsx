@@ -22,6 +22,7 @@ export default function VoiceModal({ open, onClose, onResult }: VoiceModalProps)
   const [transcript, setTranscript] = useState("");
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const transcriptRef = useRef("");
 
   if (!open) return null;
 
@@ -42,15 +43,13 @@ export default function VoiceModal({ open, onClose, onResult }: VoiceModalProps)
         if (e.results[i].isFinal) final += e.results[i][0].transcript;
         else interim += e.results[i][0].transcript;
       }
-      setTranscript(final || interim);
+      const t = final || interim;
+      setTranscript(t);
+      transcriptRef.current = t;
     };
     r.onend = () => {
       setIsListening(false);
       setAvatarState("idle");
-      const t = transcript.trim();
-      if (t) {
-        setTimeout(() => { onClose(); onResult(t); setTranscript(""); }, 400);
-      }
     };
     r.onerror = () => { setIsListening(false); setAvatarState("idle"); };
 
@@ -143,7 +142,14 @@ export default function VoiceModal({ open, onClose, onResult }: VoiceModalProps)
             🎙 {isListening ? "Listening…" : "Hold to Speak"}
           </button>
           <button
-            onClick={() => { if (recognitionRef.current && isListening) recognitionRef.current.stop(); onClose(); }}
+            onClick={() => {
+              if (recognitionRef.current && isListening) recognitionRef.current.stop();
+              const t = transcriptRef.current.trim();
+              if (t) onResult(t);
+              transcriptRef.current = "";
+              setTranscript("");
+              onClose();
+            }}
             className="px-5 py-3.5 rounded-full text-sm font-medium transition-all font-sans"
             style={{ border: "1px solid var(--border)", color: "var(--text-secondary)", background: "transparent" }}
             onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--gold)"; (e.currentTarget as HTMLElement).style.color = "var(--gold)"; }}
