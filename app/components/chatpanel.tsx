@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useLayoutEffect } from "react";
 import AvatarSVG from "./avatarsvg";
 import { Message } from "@/app/lib/useChat"
 
@@ -31,15 +31,18 @@ const SR =
 export default function ChatPanel({ messages, isTyping, onSend, onClear, onOpenVoice }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const [micActive, setMicActive] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
-  const isFirstRender = useRef(true);
+  const prevMessageCount = useRef(messages.length);
 
-  useEffect(() => {
-    if (isFirstRender.current) { isFirstRender.current = false; return; }
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isTyping]);
+  useLayoutEffect(() => {
+    if (messages.length > prevMessageCount.current) {
+      const el = messagesContainerRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    }
+    prevMessageCount.current = messages.length;
+  }, [messages]);
 
   function handleSend() {
     const txt = input.trim();
@@ -112,7 +115,7 @@ export default function ChatPanel({ messages, isTyping, onSend, onClear, onOpenV
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4" style={{ scrollBehavior: "smooth" }}>
+      <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto p-5 flex flex-col gap-4">
         {messages.map((msg) => (
           <div key={msg.id} className={`flex gap-2.5 msg-in ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
             <div
@@ -164,7 +167,6 @@ export default function ChatPanel({ messages, isTyping, onSend, onClear, onOpenV
             </div>
           </div>
         )}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Chips */}

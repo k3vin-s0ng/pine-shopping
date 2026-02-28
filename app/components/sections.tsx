@@ -148,52 +148,94 @@ const CATS = [
   { icon: "💼", name: "Services", query: "professional services and SaaS tools" },
 ];
 
+function CategoryCard({ cat, onCategoryClick }: { cat: typeof CATS[0]; onCategoryClick: (q: string) => void }) {
+  const ref = useReveal();
+  return (
+    <div
+      ref={ref}
+      className="reveal py-7 px-3 text-center rounded-2xl cursor-pointer transition-all duration-300"
+      style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}
+      onClick={() => { onCategoryClick(cat.query); document.getElementById("marketplace")?.scrollIntoView({ behavior: "smooth" }); }}
+      onMouseEnter={(e) => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.borderColor = "var(--border)";
+        el.style.background = "var(--bg-card-hover)";
+        el.style.transform = "translateY(-4px)";
+        el.style.boxShadow = "0 8px 30px rgba(0,0,0,0.35)";
+      }}
+      onMouseLeave={(e) => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.borderColor = "var(--border-subtle)";
+        el.style.background = "var(--bg-card)";
+        el.style.transform = "";
+        el.style.boxShadow = "";
+      }}
+    >
+      <div className="text-[30px] mb-2.5">{cat.icon}</div>
+      <div className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{cat.name}</div>
+    </div>
+  );
+}
+
 export function CategoriesSection({ onCategoryClick }: { onCategoryClick: (q: string) => void }) {
   return (
     <section id="categories" className="py-[110px] px-10">
       <SectionHead label="Browse by Category" title={<>Everything You <span className="grad-text">Could Need</span></>} sub="From cutting-edge tech to everyday essentials, Sicero has every category covered." />
       <div className="grid grid-cols-6 gap-3.5 max-w-[1140px] mx-auto">
-        {CATS.map((cat) => {
-          const ref = useReveal();
-          return (
-            <div
-              key={cat.name}
-              ref={ref}
-              className="reveal py-7 px-3 text-center rounded-2xl cursor-pointer transition-all duration-300"
-              style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}
-              onClick={() => { onCategoryClick(cat.query); document.getElementById("marketplace")?.scrollIntoView({ behavior: "smooth" }); }}
-              onMouseEnter={(e) => {
-                const el = e.currentTarget as HTMLElement;
-                el.style.borderColor = "var(--border)";
-                el.style.background = "var(--bg-card-hover)";
-                el.style.transform = "translateY(-4px)";
-                el.style.boxShadow = "0 8px 30px rgba(0,0,0,0.35)";
-              }}
-              onMouseLeave={(e) => {
-                const el = e.currentTarget as HTMLElement;
-                el.style.borderColor = "var(--border-subtle)";
-                el.style.background = "var(--bg-card)";
-                el.style.transform = "";
-                el.style.boxShadow = "";
-              }}
-            >
-              <div className="text-[30px] mb-2.5">{cat.icon}</div>
-              <div className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{cat.name}</div>
-            </div>
-          );
-        })}
+        {CATS.map((cat) => (
+          <CategoryCard key={cat.name} cat={cat} onCategoryClick={onCategoryClick} />
+        ))}
       </div>
     </section>
   );
 }
 
 // ── TESTIMONIALS ──
+const TESTIMONIALS = [
+  { stars: 5, text: "I told Sicero I needed a laptop for 3D animation under $1,500 that stays cool. Within seconds — five perfect options with Amazon links. No more hours of research.", name: "James Nakamura", role: "3D Artist · Tokyo, Japan", initials: "J" },
+  { stars: 5, text: "I used the voice feature and just talked to Sicero like a friend. It found exactly what I needed, the avatar even talked back. Then I clicked Buy — done.", name: "Sofia Andersson", role: "Nutritionist · Stockholm", initials: "S" },
+  { stars: 5, text: "Niche B2B sourcing. Sicero understood my requirements instantly, linked me to real vendors — saved me literal weeks.", name: "Marcus Webb", role: "Founder · Austin, TX", initials: "M" },
+];
+
+function TestimonialCard({ stars, text, name, role, initials, delay }: { stars: number; text: string; name: string; role: string; initials: string; delay: number }) {
+  const ref = useReveal();
+  return (
+    <div
+      ref={ref}
+      className="reveal rounded-[20px] p-7 transition-all duration-300"
+      style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)", transitionDelay: `${delay}s` }}
+      onMouseEnter={(e) => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.borderColor = "rgba(201,168,76,0.2)";
+        el.style.transform = "translateY(-4px)";
+        el.style.boxShadow = "0 12px 40px rgba(0,0,0,0.5)";
+      }}
+      onMouseLeave={(e) => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.borderColor = "var(--border-subtle)";
+        el.style.transform = "";
+        el.style.boxShadow = "";
+      }}
+    >
+      <div className="flex gap-0.5 mb-4">{"⭐".repeat(stars)}</div>
+      <p className="text-[13.5px] leading-[1.75] mb-[22px] italic" style={{ color: "var(--text-secondary)" }}>&ldquo;{text}&rdquo;</p>
+      <div className="flex items-center gap-3">
+        <div
+          className="w-10 h-10 rounded-[10px] flex items-center justify-center text-[15px] font-bold text-white"
+          style={{ background: "linear-gradient(135deg, var(--purple), var(--gold))" }}
+        >
+          {initials}
+        </div>
+        <div>
+          <div className="text-[13.5px] font-semibold">{name}</div>
+          <div className="text-[11.5px] mt-0.5" style={{ color: "var(--text-muted)" }}>{role}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function TestimonialsSection() {
-  const tests = [
-    { stars: 5, text: "I told Sicero I needed a laptop for 3D animation under $1,500 that stays cool. Within seconds — five perfect options with Amazon links. No more hours of research.", name: "James Nakamura", role: "3D Artist · Tokyo, Japan", initials: "J" },
-    { stars: 5, text: "I used the voice feature and just talked to Sicero like a friend. It found exactly what I needed, the avatar even talked back. Then I clicked Buy — done.", name: "Sofia Andersson", role: "Nutritionist · Stockholm", initials: "S" },
-    { stars: 5, text: "Niche B2B sourcing. Sicero understood my requirements instantly, linked me to real vendors — saved me literal weeks.", name: "Marcus Webb", role: "Founder · Austin, TX", initials: "M" },
-  ];
   return (
     <section
       id="testimonials"
@@ -202,44 +244,9 @@ export function TestimonialsSection() {
     >
       <SectionHead label="Testimonials" title={<>Loved by <span className="grad-text">Thousands</span></>} sub="Real people. Real results." />
       <div className="grid grid-cols-3 gap-[22px] max-w-[1080px] mx-auto">
-        {tests.map((t, i) => {
-          const ref = useReveal();
-          return (
-            <div
-              key={t.name}
-              ref={ref}
-              className="reveal rounded-[20px] p-7 transition-all duration-300"
-              style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)", transitionDelay: `${i * 0.1}s` }}
-              onMouseEnter={(e) => {
-                const el = e.currentTarget as HTMLElement;
-                el.style.borderColor = "rgba(201,168,76,0.2)";
-                el.style.transform = "translateY(-4px)";
-                el.style.boxShadow = "0 12px 40px rgba(0,0,0,0.5)";
-              }}
-              onMouseLeave={(e) => {
-                const el = e.currentTarget as HTMLElement;
-                el.style.borderColor = "var(--border-subtle)";
-                el.style.transform = "";
-                el.style.boxShadow = "";
-              }}
-            >
-              <div className="flex gap-0.5 mb-4">{"⭐".repeat(t.stars)}</div>
-              <p className="text-[13.5px] leading-[1.75] mb-[22px] italic" style={{ color: "var(--text-secondary)" }}>&ldquo;{t.text}&rdquo;</p>
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-10 h-10 rounded-[10px] flex items-center justify-center text-[15px] font-bold text-white"
-                  style={{ background: "linear-gradient(135deg, var(--purple), var(--gold))" }}
-                >
-                  {t.initials}
-                </div>
-                <div>
-                  <div className="text-[13.5px] font-semibold">{t.name}</div>
-                  <div className="text-[11.5px] mt-0.5" style={{ color: "var(--text-muted)" }}>{t.role}</div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+        {TESTIMONIALS.map((t, i) => (
+          <TestimonialCard key={t.name} {...t} delay={i * 0.1} />
+        ))}
       </div>
     </section>
   );
@@ -303,6 +310,7 @@ export function Footer() {
               <a
                 key={s}
                 href="#"
+                onClick={(e) => e.preventDefault()}
                 className="w-9 h-9 flex items-center justify-center rounded-[9px] text-sm transition-all no-underline"
                 style={{ border: "1px solid var(--border-subtle)", color: "var(--text-muted)", background: "transparent" }}
                 onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--gold)"; (e.currentTarget as HTMLElement).style.color = "var(--gold)"; (e.currentTarget as HTMLElement).style.background = "var(--gold-dim)"; }}
@@ -325,6 +333,7 @@ export function Footer() {
                 <li key={l}>
                   <a
                     href="#"
+                    onClick={(e) => e.preventDefault()}
                     className="text-[13.5px] transition-colors no-underline"
                     style={{ color: "var(--text-muted)" }}
                     onMouseEnter={(e) => ((e.target as HTMLElement).style.color = "var(--gold)")}

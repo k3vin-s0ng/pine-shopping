@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { DB, INTENTS, Product } from "./products";
 import { searchProducts } from "./serpapi";
 
@@ -37,6 +37,10 @@ export function useChat() {
   const [isSearching, setIsSearching] = useState(false);
   const [msgCount, setMsgCount] = useState(0);
 
+  // Sync ref so processMessage always reads the latest messages without stale closure
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+
   const addMessage = useCallback((msg: Omit<Message, "id">) => {
     setMessages((prev) => [
       ...prev,
@@ -46,7 +50,12 @@ export function useChat() {
 
   const processMessage = useCallback(
     async (text: string) => {
-      const lo = text.toLowerCase();
+      // Capture history BEFORE adding the current user message
+      const historySnapshot = messagesRef.current.map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+
       const count = msgCount + 1;
       setMsgCount(count);
       setIsTyping(true);
@@ -89,38 +98,31 @@ export function useChat() {
         return;
       }
 
-      // Find intent for acknowledgment message
-      const hit = INTENTS.find((r) => r.kw.some((k) => lo.includes(k)));
-      const ack = hit
-        ? hit.ack
-        : "Searching for the best matches — one moment 🔍";
-      addMessage({ role: "ai", content: ack, html: false, time: now() });
-
       try {
-        const results = await searchProducts(text);
+        const { products: results, chatResponse } = await searchProducts(text, historySnapshot);
+
+        // LLM asked a clarifying question — show it, don't update products
+        if (!results.length && chatResponse) {
+          addMessage({ role: "ai", content: chatResponse, html: false, time: now() });
+          return;
+        }
+
         let filtered = results;
         if (hasBudget) filtered = filtered.filter((p) => p.num <= hasBudget);
         if (!filtered.length) filtered = results;
 
         setAllProducts(filtered);
         setProducts(filtered.slice(0, 3));
-
-        if (hit) {
-          const words = text.trim().split(/\s+/).length;
-          if (words <= 2 && !hasBudget && count <= 5 && hit.clarify.length) {
-            setTimeout(() => {
-              const q = hit.clarify[Math.floor(Math.random() * hit.clarify.length)];
-              addMessage({
-                role: "ai",
-                content: `Quick question to sharpen these further — ${q}`,
-                html: false,
-                time: now(),
-              });
-            }, 1200);
-          }
-        }
+        addMessage({
+          role: "ai",
+          content: chatResponse || "Here are the best matches I found for you!",
+          html: false,
+          time: now(),
+        });
       } catch {
-        // Fallback to mock data if SerpAPI fails
+        // Fallback to mock data if the API call fails entirely
+        const lo = text.toLowerCase();
+        const hit = INTENTS.find((r) => r.kw.some((k) => lo.includes(k)));
         const keys = Object.keys(DB);
         const fallback = hit ? DB[hit.db] : DB[keys[count % keys.length]];
         setAllProducts(fallback);

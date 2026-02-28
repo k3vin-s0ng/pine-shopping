@@ -75,7 +75,7 @@ export default function ResultsPanel({
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto p-3.5 flex flex-col gap-2.5">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3.5 flex flex-col gap-2.5">
         {isSearching && (
           <div
             className="flex items-center gap-2.5 p-3.5 rounded-xl msg-in"

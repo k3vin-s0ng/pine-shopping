@@ -93,7 +93,7 @@ function SiceroApp() {
               Describe exactly what you want. Our AI listens, understands, and delivers real products with real buying links — instantly.
             </p>
           </div>
-          <div className="grid gap-[22px] h-[700px]" style={{ gridTemplateColumns: "1fr 1fr" }}>
+          <div className="grid gap-[22px] h-[700px]" style={{ gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr" }}>
             <ChatPanel
               messages={messages}
               isTyping={isTyping}

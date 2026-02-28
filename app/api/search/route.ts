@@ -47,34 +47,39 @@ async function callSerpAPI(searchQuery: string): Promise<any[]> {
 
 // POST: LLM intent extraction → refined SerpAPI query → filtered products
 export async function POST(request: NextRequest) {
-  const { query } = await request.json();
+  const { query, history } = await request.json();
 
   if (!query) return NextResponse.json({ error: "Query required" }, { status: 400 });
   if (!SERP_API_KEY) return NextResponse.json({ error: "SERP_API_KEY not configured" }, { status: 500 });
 
-  // Step 1: Extract intent (falls back to raw query on failure)
-  const intent = await extractIntent(query);
+  // Step 1: Extract intent via LLM (with full conversation history)
+  const intent = await extractIntent(query, history);
 
-  // Step 2: Build refined search query
+  // Step 2: If LLM wants to ask a clarifying question, skip the search
+  if (!intent.shouldSearch) {
+    console.log("[POST /api/search] LLM asking clarification:", intent.chatResponse);
+    return NextResponse.json({ products: [], chatResponse: intent.chatResponse });
+  }
+
+  // Step 3: Build refined search query
   let searchQuery = intent.product;
   if (intent.brand) searchQuery = `${intent.brand} ${searchQuery}`;
   if (intent.maxPrice) searchQuery += ` under $${intent.maxPrice}`;
 
-  // Step 3: Call SerpAPI
+  // Step 4: Call SerpAPI
   let rawItems: any[];
   try {
     rawItems = await callSerpAPI(searchQuery);
   } catch (err) {
     console.error("[POST /api/search] SerpAPI failed:", err);
-    return NextResponse.json({ error: "Search service unavailable", products: [], intent }, { status: 502 });
+    return NextResponse.json({ error: "Search service unavailable", products: [], chatResponse: intent.chatResponse }, { status: 502 });
   }
 
-  // Step 4: Transform and filter
+  // Step 5: Transform and filter
   let products = transformProducts(rawItems);
-
   if (intent.maxPrice) products = products.filter((p) => p.num > 0 && p.num <= intent.maxPrice!);
   if (intent.minPrice) products = products.filter((p) => p.num >= intent.minPrice!);
 
   console.log("[POST /api/search] Returning", products.length, "products for:", searchQuery);
-  return NextResponse.json({ products, intent });
+  return NextResponse.json({ products, chatResponse: intent.chatResponse });
 }

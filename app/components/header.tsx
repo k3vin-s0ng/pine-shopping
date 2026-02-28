@@ -25,7 +25,7 @@ export default function Navbar({ onOpenAuth }: NavbarProps) {
       <div className="max-w-7xl mx-auto px-[40px] py-[18px] flex items-center justify-between">
 
         {/* Logo */}
-        <a href="#" className="flex items-center gap-[14px] no-underline">
+        <a href="/" className="flex items-center gap-[14px] no-underline">
           <div
             className="w-[38px] h-[38px] rounded-[10px] flex items-center justify-center text-white text-[17px]"
             style={{
