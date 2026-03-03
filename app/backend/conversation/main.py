@@ -8,14 +8,14 @@ from datetime import datetime
 RECORDING_DURATION = 3
 SAMPLE_RATE = 44100
 CHANNELS = 1
-SPIKE_THRESHOLD = 200
+SPIKE_THRESHOLD = 500
 OUTPUT_DIR = "recordings"
 
 FRAMES_PER_RECORDING = SAMPLE_RATE*RECORDING_DURATION
 
 # USED TO SEE AUDIO SPIKES AND SEE WHETHER OR NOT THE PERSON IS TALKING OR NOT
 def audio_spike(data: np.ndarray) -> float:
-    return float(np.sqrt(np.mean(data.astype(np.float64) **2)))
+    return float(np.max(np.abs(data.astype(np.float64))))
 
 #THIS IS THE 3 SECOND RECORDING PART OF THE CODE
 def record_chunk() -> np.ndarray:
