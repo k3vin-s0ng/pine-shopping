@@ -20,6 +20,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
+const modelname = "openai/gpt-4o-mini"
 const SYSTEM_PROMPT = `You are Sicero, a high-end AI shopping concierge. Your job is to understand what the user truly needs and find the best product for them — not just the first one that matches a keyword.
 
 Respond ONLY with valid JSON:
@@ -107,7 +108,7 @@ export async function extractIntent(
 
   try {
     const response = await openai.chat.completions.create({
-      model: "openai/gpt-4o-mini",
+      model: modelname,
       temperature: 0.3,
       response_format: { type: "json_object" },
       messages: [
