@@ -8,7 +8,7 @@ from datetime import datetime
 RECORDING_DURATION = 3
 SAMPLE_RATE = 44100
 CHANNELS = 1
-SPIKE_THRESHOLD = 3000
+SPIKE_THRESHOLD = 200
 OUTPUT_DIR = "recordings"
 
 FRAMES_PER_RECORDING = SAMPLE_RATE*RECORDING_DURATION
@@ -31,12 +31,12 @@ def record_chunk() -> np.ndarray:
 
 #This is temporary, will be changed to combine chunks or smth
 def save_chunk(data: np.ndarray, index:int):
-    os.makedirs(OUTPUT_DIR, exists_ok = True)
-    timestamp = datatime.now().strftime("%Y%m%d_%H%M%S")
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = os.path.join(OUTPUT_DIR, f"spike_{timestamp}_{index:03d}.wav")
     with wave.open(filename, "w") as wf:
         wf.setnchannels(CHANNELS)
-        wf.setsampwidth(2)          # 16-bit = 2 bytes
+        wf.setsampwidth(2)   # 16-bit = 2 bytes
         wf.setframerate(SAMPLE_RATE)
         wf.writeframes(data.tobytes())
     return filename
