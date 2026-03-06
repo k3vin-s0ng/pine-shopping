@@ -16,9 +16,14 @@ function now() {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function parseBudget(msg: string): number | null {
-  const m = msg.match(/\$?(\d[\d,]*)/);
-  return m ? parseFloat(m[1].replace(/,/g, "")) : null;
+function parseBudget(msg: string): { value: number; dir: "max" | "min" } | null {
+  const minMatch = msg.match(/(?:over|above|more than|at least|minimum|min|\+)\s*\$?(\d[\d,]*)/i);
+  if (minMatch) return { value: parseFloat(minMatch[1].replace(/,/g, "")), dir: "min" };
+  const maxMatch =
+    msg.match(/(?:under|below|less than|up to|max(?:imum)?|at most|budget of?)\s*\$?(\d[\d,]*)/i) ??
+    msg.match(/\$(\d[\d,]*)/);
+  if (maxMatch) return { value: parseFloat(maxMatch[1].replace(/,/g, "")), dir: "max" };
+  return null;
 }
 
 export function useChat() {
@@ -78,14 +83,19 @@ export function useChat() {
           if (!filtered.length)
             filtered = allProducts.slice().sort((a, b) => a.num - b.num).slice(0, 2);
         }
-        if (hasBudget) filtered = filtered.filter((p) => p.num <= hasBudget);
+        if (hasBudget)
+          filtered = filtered.filter((p) =>
+            hasBudget.dir === "min" ? p.num >= hasBudget.value : p.num <= hasBudget.value
+          );
         if (!filtered.length)
           filtered = allProducts.slice().sort((a, b) => a.num - b.num).slice(0, 3);
 
         const ack = hasCheaper
           ? "Here are the more budget-friendly options from your results 👇"
           : hasBudget
-          ? `Filtered to options under $${hasBudget}:`
+          ? hasBudget.dir === "min"
+            ? `Showing options over $${hasBudget.value}:`
+            : `Filtered to options under $${hasBudget.value}:`
           : hasMore
           ? "Here are more alternatives for you:"
           : "Updated picks based on your preference:";
@@ -108,7 +118,10 @@ export function useChat() {
         }
 
         let filtered = results;
-        if (hasBudget) filtered = filtered.filter((p) => p.num <= hasBudget);
+        if (hasBudget)
+          filtered = filtered.filter((p) =>
+            hasBudget.dir === "min" ? p.num >= hasBudget.value : p.num <= hasBudget.value
+          );
         if (!filtered.length) filtered = results;
 
         setAllProducts(filtered);
