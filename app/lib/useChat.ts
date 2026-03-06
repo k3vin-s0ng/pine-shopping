@@ -38,6 +38,7 @@ export function useChat() {
   ]);
   const [products, setProducts] = useState<Product[]>([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const originalProductsRef = useRef<Product[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [msgCount, setMsgCount] = useState(0);
@@ -75,20 +76,21 @@ export function useChat() {
       const hasBudget = parseBudget(text);
 
       // Refinement on existing results (no new search needed)
-      if ((hasCheaper || hasMore || hasBudget) && allProducts.length > 0) {
-        let filtered = [...allProducts];
+      const baseProducts = originalProductsRef.current.length ? originalProductsRef.current : allProducts;
+      if ((hasCheaper || hasMore || hasBudget) && baseProducts.length > 0) {
+        let filtered = [...baseProducts];
         if (hasCheaper) {
           const minPrice = Math.min(...filtered.map((p) => p.num));
           filtered = filtered.filter((p) => p.num <= minPrice * 0.85);
           if (!filtered.length)
-            filtered = allProducts.slice().sort((a, b) => a.num - b.num).slice(0, 2);
+            filtered = baseProducts.slice().sort((a, b) => a.num - b.num).slice(0, 2);
         }
         if (hasBudget)
           filtered = filtered.filter((p) =>
             hasBudget.dir === "min" ? p.num >= hasBudget.value : p.num <= hasBudget.value
           );
         if (!filtered.length)
-          filtered = allProducts.slice().sort((a, b) => a.num - b.num).slice(0, 3);
+          filtered = baseProducts.slice().sort((a, b) => a.num - b.num).slice(0, 3);
 
         const ack = hasCheaper
           ? "Here are the more budget-friendly options from your results 👇"
@@ -124,6 +126,7 @@ export function useChat() {
           );
         if (!filtered.length) filtered = results;
 
+        originalProductsRef.current = filtered;
         setAllProducts(filtered);
         setProducts(filtered.slice(0, 3));
         addMessage({
@@ -138,6 +141,7 @@ export function useChat() {
         const hit = INTENTS.find((r) => r.kw.some((k) => lo.includes(k)));
         const keys = Object.keys(DB);
         const fallback = hit ? DB[hit.db] : DB[keys[count % keys.length]];
+        originalProductsRef.current = fallback;
         setAllProducts(fallback);
         setProducts(fallback.slice(0, 3));
         addMessage({
@@ -186,6 +190,7 @@ export function useChat() {
     ]);
     setProducts([]);
     setAllProducts([]);
+    originalProductsRef.current = [];
     setMsgCount(0);
   }, []);
 
