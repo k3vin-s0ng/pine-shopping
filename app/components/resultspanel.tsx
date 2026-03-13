@@ -35,7 +35,7 @@ export default function ResultsPanel({
 
   return (
     <div
-      className="flex flex-col rounded-[22px] overflow-hidden"
+      className="flex flex-col h-full rounded-[22px] overflow-hidden"
       style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)" }}
     >
       {/* Header */}

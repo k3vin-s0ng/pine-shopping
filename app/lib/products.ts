@@ -1,4 +1,5 @@
 export interface Product {
+  id?: string;          // unique id for UI lists
   name: string;
   cat: string;
   desc: string;
@@ -9,6 +10,10 @@ export interface Product {
   match: string;
   img: string;
   link: string;
+}
+
+export interface RankedProduct extends Product {
+  score: number;
 }
 
 export interface Intent {

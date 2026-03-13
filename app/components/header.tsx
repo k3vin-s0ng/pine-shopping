@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/app/lib/auth";
+import { useRouter } from "next/navigation";
 
 interface NavbarProps {
   onOpenAuth: (tab: "signin" | "signup") => void;
@@ -8,6 +9,7 @@ interface NavbarProps {
 
 export default function Navbar({ onOpenAuth }: NavbarProps) {
   const { user, logout } = useAuth();
+  const router = useRouter();
 
   function scrollTo(id: string) {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
@@ -45,7 +47,7 @@ export default function Navbar({ onOpenAuth }: NavbarProps) {
           {[
             { label: "How It Works", id: "how" },
             { label: "Categories", id: "categories" },
-            { label: "Marketplace", id: "marketplace" },
+            { label: "Try Demo", id: "marketplace" },
             { label: "Reviews", id: "testimonials" },
           ].map(({ label, id }) => (
             <li key={id}>

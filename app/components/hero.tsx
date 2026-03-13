@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 
 interface HeroProps {
   onGetStarted: () => void;
@@ -8,6 +9,7 @@ interface HeroProps {
 
 export default function Hero({ onGetStarted }: HeroProps) {
   const heroRef = useRef<HTMLElement>(null);
+  const router = useRouter();
 
   useEffect(() => {
     const hero = heroRef.current;
@@ -79,7 +81,7 @@ export default function Hero({ onGetStarted }: HeroProps) {
       {/* Actions */}
       <div className="flex gap-3.5 items-center relative">
         <button
-          onClick={() => scrollTo("marketplace")}
+          onClick={() => router.push("/market")}
           className="px-[34px] py-[15px] text-base rounded-full font-semibold transition-all font-sans"
           style={{ background: "linear-gradient(135deg, var(--gold), #A8732E)", color: "#080808", border: "none", cursor: "pointer" }}
           onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 20px rgba(201,168,76,0.35)"; }}
