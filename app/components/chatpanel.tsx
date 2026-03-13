@@ -13,12 +13,9 @@ interface ChatPanelProps {
 }
 
 const CHIPS = [
-  "🎧 Wireless headphones under $200",
   "💻 Laptop for video editing",
   "🌿 Organic skincare routine",
   "🏃 Running shoes for flat feet",
-  "🎮 Gaming setup under $1500",
-  "✈️ Travel backpack carry-on",
 ];
 
 const SR =
@@ -90,7 +87,7 @@ export default function ChatPanel({ messages, isTyping, onSend, onClear, onOpenV
 
   return (
     <div
-      className="flex flex-col rounded-[22px] overflow-hidden"
+      className="flex flex-col h-full rounded-[22px] overflow-hidden"
       style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)" }}
     >
       {/* Header */}
@@ -205,7 +202,7 @@ export default function ChatPanel({ messages, isTyping, onSend, onClear, onOpenV
           value={input}
           onChange={(e) => { setInput(e.target.value); autoResize(e.target); }}
           onKeyDown={handleKey}
-          placeholder="Describe what you're looking for..."
+          placeholder="Message..."
           rows={1}
           className="flex-1 rounded-xl px-[15px] py-[11px] text-[13.5px] font-sans resize-none outline-none transition-[border-color] overflow-hidden"
           style={{
