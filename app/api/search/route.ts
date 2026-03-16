@@ -10,19 +10,20 @@ function formatReviews(n: number): string {
 }
 
 function transformProducts(items: any[]): Product[] {
-  return (items || []).map((item: any, i: number) => ({
-    name: item.title || "Unknown Product",
-    cat: item.source || "Shopping",
-    desc: item.snippet || `Sold by ${item.source || "online store"}${item.delivery ? ` · ${item.delivery}` : ""}`,
-    price: item.price || "$0",
-    num: typeof item.extracted_price === "number" ? item.extracted_price : 0,
-    rating: typeof item.rating === "number" ? String(item.rating) : "0",
-    reviews: typeof item.reviews === "number" ? formatReviews(item.reviews) : "0",
-    match: `${Math.max(60, 99 - i * 3)}%`,
-    img: item.thumbnail || "",
-    // 'link' in SerpAPI Google Shopping is the direct retailer URL
-    link: item.link || item.product_link || "#",
-  }));
+  return (items || [])
+    .filter((item: any) => item.product_link) // Drop results with no direct retailer link
+    .map((item: any, i: number) => ({
+      name: item.title || "Unknown Product",
+      cat: item.source || "Shopping",
+      desc: item.snippet || `Sold by ${item.source || "online store"}${item.delivery ? ` · ${item.delivery}` : ""}`,
+      price: item.price || "$0",
+      num: typeof item.extracted_price === "number" ? item.extracted_price : 0,
+      rating: typeof item.rating === "number" ? String(item.rating) : "0",
+      reviews: typeof item.reviews === "number" ? formatReviews(item.reviews) : "0",
+      match: `${Math.max(60, 99 - i * 3)}%`,
+      img: item.thumbnail || "",
+      link: item.product_link, // Always the direct retailer URL
+    }));
 }
 
 async function callSerpAPI(searchQuery: string): Promise<any[]> {
