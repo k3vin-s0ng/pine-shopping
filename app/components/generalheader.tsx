@@ -2,6 +2,7 @@
 
 import { useAuth } from "@/app/lib/auth";
 import { useRouter } from "next/navigation";
+import Image from "next/image"
 
 interface NavbarProps {
   onOpenAuth: (tab: "signin" | "signup") => void;
@@ -28,20 +29,12 @@ export default function Navbar({ onOpenAuth }: NavbarProps) {
 
         {/* Logo */}
         <a href="/" className="flex items-center gap-[14px] no-underline">
-          <div
-            className="w-[38px] h-[38px] rounded-[10px] flex items-center justify-center text-white text-[17px]"
-            style={{
-              background: "linear-gradient(135deg, var(--gold), var(--purple))",
-              boxShadow: "0 0 20px rgba(201,168,76,0.25)",
-            }}
-          >
-            ✦
-          </div>
+          <Image className="" src="/logo.png" width={35} height={35} alt="logo" />
           <span className="font-display text-[22px] font-bold" style={{ color: "var(--gold)", letterSpacing: "0.5px" }}>
-            Sicero
+            Pine
           </span>
         </a>
-        
+
         {/* Auth */}
         {user ? (
           <button
