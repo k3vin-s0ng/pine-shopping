@@ -101,7 +101,7 @@ export default function ChatPanel({ messages, isTyping, onSend, onClear, onOpenV
             <AvatarSVG size={52} rounded="rect" />
           </div>
           <div>
-            <div className="text-[15px] font-semibold">Sicero AI Concierge</div>
+            <div className="text-[15px] font-semibold">Pine AI Assistant</div>
             <div className="flex items-center gap-1.5 text-[12px] mt-0.5" style={{ color: "#4ADE80" }}>
               <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
               Online · Ready to assist
