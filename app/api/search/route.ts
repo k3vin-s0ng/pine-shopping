@@ -10,20 +10,18 @@ function formatReviews(n: number): string {
 }
 
 function transformProducts(items: any[]): Product[] {
-  return (items || [])
-    .filter((item: any) => item.product_link) // Drop results with no direct retailer link
-    .map((item: any, i: number) => ({
-      name: item.title || "Unknown Product",
-      cat: item.source || "Shopping",
-      desc: item.snippet || `Sold by ${item.source || "online store"}${item.delivery ? ` · ${item.delivery}` : ""}`,
-      price: item.price || "$0",
-      num: typeof item.extracted_price === "number" ? item.extracted_price : 0,
-      rating: typeof item.rating === "number" ? String(item.rating) : "0",
-      reviews: typeof item.reviews === "number" ? formatReviews(item.reviews) : "0",
-      match: `${Math.max(60, 99 - i * 3)}%`,
-      img: item.thumbnail || "",
-      link: item.product_link, // Always the direct retailer URL
-    }));
+  return (items || []).map((item: any, i: number) => ({
+    name: item.title || "Unknown Product",
+    cat: item.source || "Shopping",
+    desc: item.snippet || `Sold by ${item.source || "online store"}${item.delivery ? ` · ${item.delivery}` : ""}`,
+    price: item.price || "$0",
+    num: typeof item.extracted_price === "number" ? item.extracted_price : 0,
+    rating: typeof item.rating === "number" ? String(item.rating) : "0",
+    reviews: typeof item.reviews === "number" ? formatReviews(item.reviews) : "0",
+    match: `${Math.max(60, 99 - i * 3)}%`,
+    img: item.thumbnail || "",
+    link: item.product_link || "",
+  }));
 }
 
 async function callSerpAPI(searchQuery: string): Promise<any[]> {
@@ -42,8 +40,9 @@ async function callSerpAPI(searchQuery: string): Promise<any[]> {
     throw new Error(data.error);
   }
 
-  console.log("[SerpAPI] Got", data.shopping_results?.length ?? 0, "results");
-  return data.shopping_results || [];
+  const results = data.shopping_results || [];
+  console.log("[SerpAPI] Got", results.length, "results");
+  return results;
 }
 
 // POST: LLM intent extraction → refined SerpAPI query → filtered products
