@@ -3,6 +3,7 @@
 import { useState, useRef, useLayoutEffect } from "react";
 import AvatarSVG from "./avatarsvg";
 import { Message } from "@/app/lib/useChat"
+import logo from './logo.png'
 
 interface ChatPanelProps {
   messages: Message[];
@@ -125,7 +126,7 @@ export default function ChatPanel({ messages, isTyping, onSend, onClear, onOpenV
                 : { background: "var(--gold-dim)", border: "1px solid var(--border)", color: "var(--gold)", fontWeight: 700, fontSize: "11px" }
               }
             >
-              {msg.role === "ai" ? "✦" : "You"}
+              {msg.role === "ai" ? (<img src="/logo.png" alt="AI" className="w-5 h-5 inline" />) : "You"}
             </div>
             <div className={`max-w-[78%] ${msg.role === "user" ? "items-end flex flex-col" : ""}`}>
               <div
