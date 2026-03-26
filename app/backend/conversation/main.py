@@ -8,7 +8,7 @@ import whisper
 from pydub import AudioSegment
 import tempfile
 import re
-
+ 
 RECORDING_DURATION = 3
 SAMPLE_RATE = 44100
 CHANNELS = 1
