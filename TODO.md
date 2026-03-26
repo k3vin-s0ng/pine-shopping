@@ -1,6 +1,6 @@
-# Sicero — Active Task Board
+# Pine — Active Task Board
 
-_Updated each session. Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
+_Updated: 2026-03-25 (D1/D2 session) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
 
 ---
 
@@ -8,7 +8,9 @@ _Updated each session. Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
 
 | # | Task | Owner | Notes |
 |---|---|---|---|
-| B-01 | OpenRouter API key invalid | [K] | Code is correct; Kevin's API key returns 401. Not a code bug — awaiting valid key from Kevin before LLM-driven intent extraction and clarifying questions can be tested end-to-end |
+
+| B-02 | Daniel↔Kevin Data Agent handoff contract | [D]/[K] | Schema defined in CLAUDE.md. Needs explicit agreement from Kevin before K2+ and D5+ can be built. Priority: next team meeting. |
+| B-03 | Direct retailer URL resolution strategy | [K] | SerpAPI Google Shopping returns google.com/shopping URLs — not retailer URLs. Affiliate links (Skimlinks, Amazon Associates) require direct retailer URLs to generate commissions. Kevin must resolve this before affiliate monetization works. See K8 for resolution options. Daniel's Reasoning Agent is unaffected — it stays on SerpAPI for search; Kevin's Data Agent is responsible for returning valid `url` in enriched result objects. |
 
 ---
 
@@ -22,48 +24,83 @@ _Updated each session. Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
 
 ## 🟢 Up Next (Prioritized)
 
+### Week 1 — Critical Path
+
 | # | Task | Owner | Notes |
 |---|---|---|---|
-| U-01 | Define user personas (at least 2) | [D]/[E] | PM task — who is actually using Shop Mode? |
-| U-02 | Draft Product Requirements Document (PRD) | [D] | After team alignment on Shop/Plan vision |
-| U-03 | Clarification modal — trigger logic | [D] | Backend path implemented: shouldSearch=false returns LLM question without searching. Needs working API key (B-01) to test end-to-end. |
-| U-04 | Error states: no results, API failure | [D] | UX requirement before MVP is shippable |
+| K1 | Data Agent: structured query intake contract | [K] | Accept typed query object from Reasoning Agent. Schema in CLAUDE.md. Agree with Daniel before building. |
+| K8 | Direct retailer URL resolution | [K] | **Blocks affiliate monetization.** Kevin to choose and implement one of: (1) SerpAPI Product Results endpoint — takes Google Shopping product ID, returns merchant seller links with direct retailer URLs; extra call per product but keeps SerpAPI as fallback. (2) Amazon Product Advertising API — returns direct Amazon URLs natively, designed for Associates program. (3) Direct scraping — Kevin's Data Agent scrapes retailer pages directly, URL is the page URL. All three valid; Kevin decides based on reliability and rate limits. Enriched result object `url` field MUST be a direct retailer URL — never a google.com/shopping URL. |
+| K2 | Retailer scraping layer | [K] | Adapt existing scraping agent. Start with Amazon + Target + 1 category retailer. Narrow and reliable beats broad and flaky. |
+| E1 | Voice input via Web Speech API | [E] | Orb tap → listening → transcript feeds D1 pipeline. Chrome desktop reliable for demo. |
+| E2 | Orb UI state machine | [E] | 4 states: idle / listening / processing / responding. Distinct animation per state. |
+| D3 | Multi-turn clarification loop | [D] | One question max per turn. Double-duty: narrows product space AND reweights soft preferences. Builds on D1/D2. |
+
+### Week 2 — Reasoning + Integration
+
+| # | Task | Owner | Notes |
+|---|---|---|---|
+| K3 | Product page fetch + structured extraction | [K] | Per product: price, in_stock, title, specs, image_url, url (must be direct retailer URL — see K8), retailer_sku |
+| K4 | Review signal extraction | [K] | `{ quality_signal, fit_signal, value_signal, avg_rating, review_count }`. Fallback: avg_rating + review_count only if review scraping blocked. |
+| K5 | Enriched result object construction | [K] | Combine K3+K4 into typed JSON per product per CLAUDE.md schema. `url` field must be direct retailer URL (see K8). Must be stable — Daniel builds D5/D6 against it. |
+| K6 | Sparse result flag | [K] | Flag which hard constraint failed when <3 results returned. Triggers D7. |
+| K7 | SerpAPI silent fallback | [K] | Fires when scraping returns 0 or errors. When falling back to SerpAPI, Kevin must still resolve to direct retailer URLs (see K8) or flag affiliate linking as degraded for that result. |
+| D4 | Dialog adaptation by expertise level | [D] | Classify user vocab on first message (vibe vs. spec). Low-effort after D1-D3. |
+| D5 | Personalized utility scoring | [D] | Score Kevin's enriched results against soft preference vector. Replaces default SerpAPI ordering. Requires K5 stable. |
+| D6 | Intent-match explanation generation | [D] | One sentence per top 3 results using Kevin's review_signals + expressed intent. Highest-visibility Level 4 feature. |
+| D7 | Constraint relaxation logic | [D] | When K6 sparse flag received: relax least-important constraint, re-query, tell user what changed. |
+| D8 | Confident single recommendation mode | [D] | When top utility score significantly outscores others, Pine commits to one. User can ask for alternatives. |
+| E3 | Voice output via Web Speech Synthesis | [E] | Pine speaks clarifications + explanations. Browser-native. Completes voice loop. |
+| E4 | Result cards with explanation display | [E] | 3 cards max. Image, price, "View at [Retailer]" link with retailer logo, one-sentence D6 explanation. No generic "Buy Now." Link must use direct retailer URL from Kevin's enriched result object for affiliate tracking to work. |
+| E5 | Typing fallback input | [E] | Always present, visually subordinate to orb. Full pipeline parity with voice. |
+| — | Integration test: full voice → intent → Data Agent → scoring → explanation → display | [D]/[K]/[E] | End-to-end demo rehearsal. Must pass before Character Capital. Verify affiliate URLs resolve correctly. |
+
+### PM / Product (Parallel)
+
+| # | Task | Owner | Notes |
+|---|---|---|---|
+| U-01 | Define user personas (at least 2) | [D]/[E] | Who is actually using Shop Mode? |
+| U-02 | Draft PRD | [D] | After team alignment on Shop/Plan vision |
+| U-04 | Error states: no results, API failure | [D] | UX requirement before demo |
 | U-05 | Basic session persistence | [D] | Don't lose conversation on refresh |
 
 ---
 
-## ⚪ Backlog (Not Yet Scheduled)
+## ⚪ Backlog — Phase 3 (Plan Mode — do not start until Level 4 complete)
 
-### LLM & Intent Engine
-| # | Task | Owner | Mode |
+### LLM & Intent
+| # | Task | Owner | Notes |
 |---|---|---|---|
 | L-02 | Multi-turn prompt chain for Plan Mode | [D] | Plan |
-| L-03 | Confidence scoring on extracted intent | [D] | Shop |
+| P2 | Bundle intent extraction | [D] | Multi-item scenario → structured bundle intent |
+| P3 | Bundle coherence scoring | [D] | Score assembled bundle as a whole, not just individual items |
 
 ### Search & Product Pipeline
-| # | Task | Owner | Mode |
+| # | Task | Owner | Notes |
 |---|---|---|---|
-| S-01 | Category and mustHaves filter post-search | [D] | Shop | Price and brand filters are done; category/mustHaves are passed to the search query string but not post-filtered |
+| S-01 | Category and mustHaves filter post-search | [D] | Shop — price/brand done; `hard_constraints.must_have_attributes` now extracted by LLM but not yet used for post-search filtering |
+| S-04 | End-to-end mock mode test for D1/D2 | [D] | Validate all acceptance criteria with `MOCK_INTENT=true` and `MOCK_CLARIFY=true`. Blocked until B-01 (API key) resolved for live testing. |
 | S-02 | Result deduplication | [D] | Shop |
 | S-03 | Multi-item fetch for Plan Mode bundles | [D] | Plan |
 
 ### Chat UI & UX
-| # | Task | Owner | Mode |
+| # | Task | Owner | Notes |
 |---|---|---|---|
-| C-01 | Shop / Plan mode toggle | [D] | Both |
-| C-02 | Plan summary card component | [D] | Plan |
-| C-03 | Product card — "Add to Plan" button | [D] | Plan |
-| C-05 | Deduplicate generalheader.tsx vs header.tsx | [D] | Both | Two nearly identical navbar components exist — consolidate |
+| C-01 | Shop / Plan mode toggle | [E] | Both |
+| C-02 | Plan summary card component | [E] | Plan |
+| C-03 | Product card — "Add to Plan" button | [E] | Plan |
+| C-05 | Deduplicate generalheader.tsx vs header.tsx | [D] | Low priority |
+| I4 | Right detail panel full implementation | [E] | Currently minimal |
 
 ### Infrastructure & Backend
-| # | Task | Owner | Mode |
+| # | Task | Owner | Notes |
 |---|---|---|---|
-| K-01 | Database schema design | [K] | Both |
-| K-02 | User session API | [K] | Both |
-| K-03 | Saved plans storage | [K] | Plan |
+| K-01 | Database schema design | [K] | Phase 4 |
+| K-02 | User session API | [K] | Phase 4 |
+| K-03 | Saved plans storage | [K] | Phase 4 |
+| I1 | Replace localStorage auth with Kevin's backend | [K] | Phase 4 — btoa not production-safe |
 
 ### Product & Growth
-| # | Task | Owner | Mode |
+| # | Task | Owner | Notes |
 |---|---|---|---|
 | P-01 | Analytics events instrumentation | [D]/[K] | Both |
 | P-02 | Onboarding flow | [D]/[E] | Both |
@@ -85,12 +122,21 @@ _Updated each session. Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
 | ✓ | Typing indicator and loading state — isTyping / isSearching (C-04) | 2026-03-15 |
 | ✓ | Price filter layer — min/max on SerpAPI results and client-side (partial S-01) | 2026-03-15 |
 | ✓ | Price filter direction — "over $X" vs "under $X" without false-positives on model numbers | 2026-03-15 |
-| ✓ | Original products ref — subsequent price filters re-apply to original results, not prior filtered set | 2026-03-15 |
-| ✓ | Voice input modal — hold-to-speak, transcript display, Done button submits (not mouse-up) | 2026-03-15 |
+| ✓ | Original products ref — subsequent filters re-apply to original results, not prior filtered set | 2026-03-15 |
+| ✓ | Voice input modal — hold-to-speak, transcript display, Done button submits | 2026-03-15 |
 | ✓ | Auth system — sign in / sign up modal with localStorage persistence | 2026-03-15 |
 | ✓ | Marketing landing page — hero, features, how-it-works, testimonials, footer | 2026-03-15 |
 | ✓ | Removed non-functional Buy Now / Details buttons from product cards | 2026-03-15 |
+| ✓ | Rejected travel pivot — documented rationale | 2026-03-25 |
+| ✓ | Affiliate monetization strategy finalized (Skimlinks + Amazon Associates) | 2026-03-25 |
+| ✓ | Pine rebrand from Sicero — navy/gold, pinecone logo | 2026-03-25 |
+| ✓ | Level 4 DME architecture defined — feature list and owner assignments | 2026-03-25 |
+| ✓ | Daniel↔Kevin data contract schema defined in CLAUDE.md | 2026-03-25 |
+| ✓ | B-01: OpenRouter API key resolved — live LLM calls working | 2026-03-26 |
+| ✓ | D1: Structured intent extraction — IntentExtractionResult type + LLM prompt refactor | 2026-03-26 |
+| ✓ | D2: Intent confidence scoring (0.0–1.0) + clarification gate wired into shouldSearch path | 2026-03-26 |
 
 ---
 
-_To update: change status emoji and move row to appropriate section. Add date to Completed items._
+_To update: change status emoji and move row. Add date to Completed items._
+

@@ -1,16 +1,16 @@
-# Sicero — Claude Code Session Briefing
+# Pine — Claude Code Session Briefing
 
 > Read this file first, every session. Then read `PLAN.md` and `TODO.md` before writing any code.
 
 ---
 
-## What Is Sicero?
+## What Is Pine?
 
-Sicero is an AI-powered conversational shopping assistant. The core differentiator is **true conversational flow** — users can refine searches naturally ("only show gaming ones", "under $100") without losing context. This is NOT a search engine with a chat wrapper. Context retention across turns is a first-class product requirement.
+Pine is an AI-powered conversational shopping assistant. The core differentiator is **conversational intent translation** — users describe what they want naturally and Pine returns real, purchasable products. This is NOT a search engine with a chat wrapper. Context retention across turns is a first-class product requirement.
 
 The platform has two modes:
-- **Shop Mode** — conversational product discovery and search
-- **Plan Mode** — multi-item planning for events, gifts, bundles
+- **Shop Mode** — single-item conversational product discovery
+- **Plan Mode** — multi-item bundle planning for events, gifts, dorm rooms, outfits
 
 ---
 
@@ -20,8 +20,8 @@ The platform has two modes:
 |---|---|
 | Frontend | Next.js + TypeScript + React |
 | LLM | OpenRouter → GPT-4o-mini |
-| Product Search | SerpAPI (Google Shopping) |
-| Database | (Kevin — not yet integrated) |
+| Product Search | SerpAPI (Google Shopping) — being replaced by Kevin's Data Agent |
+| Database | Kevin — not yet integrated |
 | Design | Figma |
 
 ---
@@ -30,15 +30,15 @@ The platform has two modes:
 
 | Person | Domain |
 |---|---|
-| Daniel | LLM integration, web scraping, product management |
-| Kevin | Backend infrastructure, databases |
-| Eric | Planning, product vision |
+| Daniel | LLM integration, Reasoning Agent, product management |
+| Kevin | Backend infrastructure, Data Agent (scraping + retrieval) |
+| Eric | Product vision, UI/UX design, voice interface |
 
-Daniel is the emerging PM. When making architecture decisions, flag tradeoffs clearly so Daniel can make the call — don't just pick one path silently.
+Daniel is the PM. When making architecture decisions, flag tradeoffs clearly so Daniel can make the call.
 
 ---
 
-## Architecture Overview
+## Architecture Overview (Current — Level 3.5)
 
 ```
 User Message
@@ -54,8 +54,91 @@ Result Formatter
 Response + Product Cards rendered in React
 ```
 
+## Architecture Target (Level 4 — In Progress)
+
+```
+User Voice/Text Input
+    ↓
+Reasoning Agent (Daniel)
+    ├── Structured Intent Extraction → { hard_constraints, soft_preferences, confidence_score }
+    ├── Confidence Check
+    │     ├── Low (<0.5): Fire clarification question (double-duty: narrows + reweights)
+    │     └── High (≥0.5): Proceed to Data Agent
+    ↓
+Data Agent (Kevin)
+    ├── Multi-source retailer scraping
+    ├── Product page fetch + spec extraction
+    ├── Review signal extraction
+    └── Returns enriched result objects[]
+    ↓
+Reasoning Agent (Daniel) — continued
+    ├── Utility scoring against soft preference vector
+    ├── Intent-match explanation generation (per top 3 results)
+    └── Constraint relaxation if results sparse
+    ↓
+UI (Eric)
+    └── Orb voice interface + Result cards with explanations
+```
+
+### Handoff Contract (Daniel ↔ Kevin) — MUST NOT CHANGE without both agreeing
+
+**Reasoning Agent → Data Agent (query object):**
+```typescript
+{
+  hard_constraints: {
+    category?: string;
+    budget_ceiling?: number;
+    budget_floor?: number;
+    must_have_attributes?: string[];
+    in_stock_required?: boolean;
+  };
+  soft_preferences: {
+    aesthetic?: string;
+    occasion?: string;
+    vibe_keywords?: string[];
+    brand_sensitivity?: "low" | "medium" | "high";
+    quality_priority?: "low" | "medium" | "high";
+  };
+  search_query: string;
+  session_id: string;
+}
+```
+
+**Data Agent → Reasoning Agent (enriched result object per product):**
+```typescript
+{
+  product_name: string;
+  price: number;
+  in_stock: boolean;
+  url: string;           // MUST be a direct retailer URL (e.g. amazon.com/dp/..., target.com/p/...)
+                         // NEVER a google.com/shopping URL -- affiliate links require direct retailer URLs
+                         // Kevin owns URL resolution via SerpAPI Product Results, Amazon PA-API, or scraping
+  image_url: string;
+  retailer: string;
+  retailer_sku: string;        // keep for future closed-ecosystem fulfillment
+  specs: Record<string, string>;
+  review_signals: {
+    quality_signal: string;
+    fit_signal: string;
+    value_signal: string;
+    avg_rating: number;
+    review_count: number;
+  };
+  constraint_satisfaction: {
+    hard_constraints_met: boolean;
+    soft_preference_score: number | null;  // null until Reasoning Agent scores it
+  };
+  sparse_result_flag?: {
+    constraint_failed: string;
+    fallback_available: boolean;
+  };
+}
+```
+
+---
+
 ### Critical Constraint: Context Management
-The intent extraction system **must** receive the full conversation history on every turn. A message like "only show gaming ones" has zero meaning without prior context. **Root cause identified:** the intent extraction function was not being passed conversation history at all — it was operating stateless. Never strip or omit conversation history before the LLM call. This is a known past failure point.
+The intent extraction system **must** receive the full conversation history on every turn. A message like "only show gaming ones" has zero meaning without prior context. **Root cause identified and fixed:** the intent extraction function was previously not being passed conversation history — it was operating stateless. Never strip or omit conversation history before the LLM call. This is a known past failure point.
 
 ---
 
@@ -63,16 +146,20 @@ The intent extraction system **must** receive the full conversation history on e
 
 - Agent avatar (`avatarsvg.tsx`) — animated SVG with idle / listening / speaking states
 - Chat panel (`chatpanel.tsx`) — message history, auto-resize textarea, voice toggle, typing indicator, quick-action chips
-- Voice input modal (`voicemodal.tsx`) — hold-to-speak, live transcript display, Done button submits (not mouse-up)
-- Speech bubbles — rendered inside chat panel
+- Voice input modal (`voicemodal.tsx`) — hold-to-speak, live transcript display, Done button submits
 - Product cards (`market.tsx`) — image, name, price, rating, match %, direct buy link
-- Results panel (`resultspanel.tsx`) — filter bar (Top Match, All Results, Price ↑↓), product grid, empty state
-- Right detail panel (`rightpanel.tsx`) — selected product full view (currently minimal)
-- Auth modal (`authmodal.tsx`) — sign in / sign up tabs, localStorage persistence (NOT production-safe)
-- Marketing landing page sections (`sections.tsx`) — TrustBar, HowSection, Features, Categories, Testimonials, CTA, Footer
-- Header / navbar (`header.tsx`, `generalheader.tsx`) — two near-identical navbars exist; consolidation pending (C-05)
+- Results panel (`resultspanel.tsx`) — filter bar, product grid, empty state
+- Right detail panel (`rightpanel.tsx`) — selected product full view (minimal)
+- Auth modal (`authmodal.tsx`) — localStorage persistence (NOT production-safe)
+- Marketing landing page (`sections.tsx`)
+- Header / navbar (`header.tsx`, `generalheader.tsx`) — consolidation pending (C-05)
 
-**Note:** The clarification modal component exists but its trigger is the `shouldSearch: false` path in the API route, not a separate modal UI. It surfaces as a chat message, not a popup.
+**Clarification flow:** The clarification modal exists but surfaces as a chat message via the `shouldSearch: false` path in the API route — not a popup. Wire `clarification_needed: true` from intent extraction into this existing path.
+
+---
+
+## Monetization (Current)
+Affiliate-first via Skimlinks + Amazon Associates. Long-term vision is a closed ecosystem where payment completes on Pine and we source direct from retailer — requires retailer agreements, payment processing (Stripe), and backend infrastructure. **Do not build payment infrastructure now.** Retailer SKU field is included in the data contract to preserve the path.
 
 ---
 
@@ -82,63 +169,62 @@ The intent extraction system **must** receive the full conversation history on e
 - Keep LLM prompt logic in dedicated prompt files, not inline
 - Conversation history must be passed as a typed array, not reconstructed from DOM
 - When adding a feature, check `TODO.md` for the relevant backlog item and update its status
+- Intent extraction output must be parsed with try/catch — fallback to flat query string on failure
 
 ---
 
 ## Auth System (Current State)
-
-Auth is implemented via `auth.tsx` (React context + localStorage). Users are stored under `sicero_users` and `sicero_current` keys. Passwords are encoded with `btoa()` — **this is not secure and must not go to production**. Replace with Kevin's backend before any real user-facing launch.
+Auth via `auth.tsx` (React context + localStorage). Passwords encoded with `btoa()` — not secure, placeholder only. Replace with Kevin's backend before any real launch.
 
 ---
 
-## Python Backend Services (Separate / Unintegrated)
-
-Two Python services exist under `app/backend/` but are **not connected to the main Next.js app**:
-
-- `conversation/main.py` — audio recording + Whisper transcription (spike detection, chunk merging). Superseded by the browser Speech Recognition API used in `voicemodal.tsx`.
-- `evidence-finder/main.py` — FastAPI service for debate card-cutting research (Mojeek + ScrapingDog + Gemini). Entirely separate product; has hardcoded API keys — do not commit if keys are real.
+## Python Backend Services (Unintegrated)
+- `conversation/main.py` — Whisper transcription spike. Superseded by browser Speech Recognition API.
+- `evidence-finder/main.py` — FastAPI debate research service. Separate product. Do not touch.
 
 ---
 
 ## What NOT to Do
 
-- Do not pivot the product scope mid-session without flagging it as a strategic decision
+- Do not pivot product scope mid-session without flagging as a strategic decision
 - Do not silently drop conversation history to simplify a function
 - Do not add new dependencies without noting them here
-- Do not implement Plan Mode features until Shop Mode core is stable
-- Do not use the localStorage auth system as a model for real auth — it is a placeholder only
+- Do not implement Plan Mode features until Shop Mode Level 4 core is stable
+- Do not use localStorage auth as a model for real auth
+- Do not change the Daniel↔Kevin handoff contract schema without both agreeing
+- Do not remove SerpAPI fallback until Kevin's scraping agent is demonstrably stable
 
 ---
 
 ## Daniel's Workflow Pattern
 
-- **Browser Claude (this chat)** — strategic decisions, market analysis, PRD drafting, architecture planning, PM work
-- **Claude Code (IDE)** — specific feature implementation, debugging, code generation
+- **Browser Claude (this project)** — strategy, architecture, PRD drafting, investor materials, PM decisions
+- **Claude Code (IDE)** — feature implementation, debugging, code generation
 
-Keep these contexts separate. Don't ask Claude Code to make product strategy calls; don't ask browser Claude to debug a TypeScript error.
+Keep these contexts separate.
 
 ---
 
 ## Session Startup Checklist
 
-1. Read `PLAN.md` — understand current phase and priorities
-2. Read `TODO.md` — know what's active, in-progress, and blocked
-3. Ask Daniel to confirm the session goal before writing code
-4. After the session, update `TODO.md` with status changes
+1. Read `PLAN.md` — current phase and priorities
+2. Read `TODO.md` — active, in-progress, and blocked items
+3. Confirm session goal with Daniel before writing code
+4. After session, update `TODO.md` with status changes per auto-update rule
 
 ---
 
 ## Auto-Update Rule (MANDATORY)
 
-After completing **any** task in a session, update `TODO.md`:
-- Move finished items to ✅ Completed with today's date
-- Move newly discovered blockers to 🔴 Blocked with a one-line description
-- Update 🟡 In Progress items with a short note on current state
-- Add any new tasks that emerged during the session to ⚪ Backlog
+After completing **any** task, update `TODO.md`:
+- ✅ Completed — move finished items with today's date
+- 🔴 Blocked — move blockers with one-line description
+- 🟡 In Progress — add short note on current state
+- ⚪ Backlog — add any newly discovered tasks
 
 After **significant** sessions (new feature shipped, architecture changed, strategic decision made), also update `PLAN.md`:
 - Check off completed phase items
-- Add a row to the Strategic Decisions Log with date + rationale
-- Update the `_Last updated_` date at the top
+- Add a row to the Strategic Decisions Log
+- Update `_Last updated_` date
 
-> When Daniel pastes updated file contents into Browser Claude, that is the sync point for strategy and planning. Keep these files accurate — they are the single source of truth.
+> When Daniel pastes updated file contents into Browser Claude, that is the sync point. Keep these files accurate — they are the single source of truth.
