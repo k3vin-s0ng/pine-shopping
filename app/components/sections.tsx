@@ -36,8 +36,8 @@ export function TrustBar() {
 // ── HOW IT WORKS ──
 export function HowSection() {
   const steps = [
-    { num: "01", icon: "💬", title: "Describe Your Need", desc: "Talk to Sicero by text or voice. Share requirements, budget, style, and deal-breakers in plain language." },
-    { num: "02", icon: "🧠", title: "AI Searches Instantly", desc: "Sicero extracts your filters and surfaces real, purchasable products — no clarifying questions unless truly needed." },
+    { num: "01", icon: "💬", title: "Describe Your Need", desc: "Talk to Pine by text or voice. Share requirements, budget, style, and deal-breakers in plain language." },
+    { num: "02", icon: "🧠", title: "AI Searches Instantly", desc: "Pine extracts your filters and surfaces real, purchasable products — no clarifying questions unless truly needed." },
     { num: "03", icon: "✦", title: "Buy With One Click", desc: "Click any result to go directly to the product page on Amazon or the brand's store. Real prices, real availability." },
   ];
   return (
@@ -95,12 +95,12 @@ export function FeaturesSection() {
     { icon: "🎙", title: "Voice Conversations", desc: "Talk hands-free. The AI avatar listens, understands, and speaks results back naturally — like a real shopping assistant." },
     { icon: "🛒", title: "Real Buy Links", desc: "Every product links directly to Amazon or brand stores with real pricing. No dead ends, no fake listings." },
     { icon: "⚡", title: "Instant Results", desc: "Results appear the moment you send. Refine with follow-ups like \"cheaper\" or \"show me black ones\" — it adapts immediately." },
-    { icon: "💡", title: "Context Awareness", desc: "Sicero remembers the conversation. Refine, compare, and build on previous searches without starting over." },
-    { icon: "🌐", title: "Goods & Services", desc: "Physical products, digital goods, freelance services, SaaS — Sicero covers every category in one place." },
+    { icon: "💡", title: "Context Awareness", desc: "Pine remembers the conversation. Refine, compare, and build on previous searches without starting over." },
+    { icon: "🌐", title: "Goods & Services", desc: "Physical products, digital goods, freelance services, SaaS — Pine covers every category in one place." },
   ];
   return (
     <section className="py-[110px] px-10">
-      <SectionHead label="Why Sicero" title={<>Built for the Way <span className="grad-text">You Think</span></>} sub="Every feature designed to make discovery effortless and purchasing confident." />
+      <SectionHead label="Why Pine" title={<>Built for the Way <span className="grad-text">You Think</span></>} sub="Every feature designed to make discovery effortless and purchasing confident." />
       <div className="grid grid-cols-3 gap-5 max-w-[1080px] mx-auto">
         {features.map((f, i) => (
           <FeatureCard key={f.title} {...f} delay={i * 0.08} />
@@ -180,7 +180,7 @@ function CategoryCard({ cat, onCategoryClick }: { cat: typeof CATS[0]; onCategor
 export function CategoriesSection({ onCategoryClick }: { onCategoryClick: (q: string) => void }) {
   return (
     <section id="categories" className="py-[110px] px-10">
-      <SectionHead label="Browse by Category" title={<>Everything You <span className="grad-text">Could Need</span></>} sub="From cutting-edge tech to everyday essentials, Sicero has every category covered." />
+      <SectionHead label="Browse by Category" title={<>Everything You <span className="grad-text">Could Need</span></>} sub="From cutting-edge tech to everyday essentials, Pine has every category covered." />
       <div className="grid grid-cols-6 gap-3.5 max-w-[1140px] mx-auto">
         {CATS.map((cat) => (
           <CategoryCard key={cat.name} cat={cat} onCategoryClick={onCategoryClick} />
@@ -192,9 +192,9 @@ export function CategoriesSection({ onCategoryClick }: { onCategoryClick: (q: st
 
 // ── TESTIMONIALS ──
 const TESTIMONIALS = [
-  { stars: 5, text: "I told Sicero I needed a laptop for 3D animation under $1,500 that stays cool. Within seconds — five perfect options with Amazon links. No more hours of research.", name: "James Nakamura", role: "3D Artist · Tokyo, Japan", initials: "J" },
-  { stars: 5, text: "I used the voice feature and just talked to Sicero like a friend. It found exactly what I needed, the avatar even talked back. Then I clicked Buy — done.", name: "Sofia Andersson", role: "Nutritionist · Stockholm", initials: "S" },
-  { stars: 5, text: "Niche B2B sourcing. Sicero understood my requirements instantly, linked me to real vendors — saved me literal weeks.", name: "Marcus Webb", role: "Founder · Austin, TX", initials: "M" },
+  { stars: 5, text: "I told Pine I needed a laptop for 3D animation under $1,500 that stays cool. Within seconds — five perfect options with Amazon links. No more hours of research.", name: "James Nakamura", role: "3D Artist · Tokyo, Japan", initials: "J" },
+  { stars: 5, text: "I used the voice feature and just talked to Pine like a friend. It found exactly what I needed, the avatar even talked back. Then I clicked Buy — done.", name: "Sofia Andersson", role: "Nutritionist · Stockholm", initials: "S" },
+  { stars: 5, text: "Niche B2B sourcing. Pine understood my requirements instantly, linked me to real vendors — saved me literal weeks.", name: "Marcus Webb", role: "Founder · Austin, TX", initials: "M" },
 ];
 
 function TestimonialCard({ stars, text, name, role, initials, delay }: { stars: number; text: string; name: string; role: string; initials: string; delay: number }) {
@@ -280,7 +280,7 @@ export function CTASection({ onGetStarted: _onGetStarted }: { onGetStarted: () =
         onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 20px rgba(201,168,76,0.35)"; }}
         onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.transform = ""; (e.currentTarget as HTMLElement).style.boxShadow = ""; }}
       >
-        Try Sicero — It&apos;s Free
+        Try Pine — It&apos;s Free
       </button>
     </section>
   );
@@ -300,7 +300,7 @@ export function Footer() {
               className="w-[38px] h-[38px] rounded-[10px] flex items-center justify-center text-white text-[17px]"
               style={{ background: "linear-gradient(135deg, var(--gold), var(--purple))" }}
             >✦</div>
-            <span className="font-display text-[22px] font-bold" style={{ color: "var(--gold)" }}>Sicero</span>
+            <span className="font-display text-[22px] font-bold" style={{ color: "var(--gold)" }}>Pine</span>
           </div>
           <p className="text-[13.5px] leading-[1.75] max-w-[260px]" style={{ color: "var(--text-muted)" }}>
             The world&apos;s first AI-powered conversational marketplace. Find anything, fast — just by talking.
@@ -351,7 +351,7 @@ export function Footer() {
         className="flex items-center justify-between pt-7"
         style={{ borderTop: "1px solid var(--border-subtle)" }}
       >
-        <p className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>© 2026 Sicero Inc. All rights reserved.</p>
+        <p className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>© 2026 Pine Inc. All rights reserved.</p>
         <p className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>
           Built with <span style={{ color: "var(--gold)" }}>✦</span> and intelligence
         </p>

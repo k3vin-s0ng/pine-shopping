@@ -62,7 +62,7 @@ export default function VoiceModal({ open, onClose, onResult }: VoiceModalProps)
   }
 
   const statusLabel =
-    avatarState === "speaking" ? "Sicero is speaking…" :
+    avatarState === "speaking" ? "Pine is speaking…" :
     avatarState === "listening" ? "Listening…" :
     "Press & hold to speak";
 

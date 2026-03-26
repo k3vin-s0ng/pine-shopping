@@ -74,7 +74,7 @@ export default function AuthModal({ open, defaultTab = "signin", onClose, onSucc
         <div className="flex items-center gap-2 mb-7">
           <div className="w-8 h-8 rounded-[10px] flex items-center justify-center text-white text-sm font-bold"
             style={{ background: "linear-gradient(135deg, var(--gold), var(--purple))" }}>✦</div>
-          <span className="font-display text-lg font-bold" style={{ color: "var(--gold)" }}>Sicero</span>
+          <span className="font-display text-lg font-bold" style={{ color: "var(--gold)" }}>Pine</span>
         </div>
 
         {/* Tabs */}

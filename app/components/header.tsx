@@ -60,7 +60,7 @@ export default function Navbar({ onOpenAuth }: NavbarProps) {
         {/* Auth */}
         {user ? (
           <button
-            onClick={() => { if (confirm("Sign out of Sicero?")) logout(); }}
+            onClick={() => { if (confirm("Sign out of Pine?")) logout(); }}
             className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg transition-all"
             style={{ border: "1px solid var(--border)", background: "var(--gold-dim)", cursor: "pointer" }}
             onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "rgba(201,168,76,0.2)")}

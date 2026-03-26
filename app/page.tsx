@@ -12,7 +12,7 @@ import ChatPanel from "@/app/components/chatpanel";
 import ResultsPanel from "@/app/components/resultspanel"
 import { useChat } from "@/app/lib/useChat";
 
-function SiceroApp() {
+function PineApp() {
   const { user } = useAuth();
   const [authOpen, setAuthOpen] = useState(false);
   const [authTab, setAuthTab] = useState<"signin" | "signup">("signin");
@@ -126,7 +126,7 @@ function SiceroApp() {
 export default function Home() {
   return (
     <AuthProvider>
-      <SiceroApp />
+      <PineApp />
     </AuthProvider>
   );
 }
