@@ -14,9 +14,17 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "Sicero — The AI Shopping Concierge",
+  title: "Pine — The AI Shopping Assitant",
   description:
     "Describe exactly what you need and our AI concierge surfaces the perfect products in seconds.",
+  openGraph: {
+    siteName: "Pine",
+    url: "https://www.pineshopping.com",
+    title: "Pine",
+    description:
+      "Describe exactly what you need and our AI concierge surfaces the perfect products in seconds.",
+    images: [{ url: "/logo.png", width: 1200, height: 630 }],
+  },
 };
 
 export default function RootLayout({

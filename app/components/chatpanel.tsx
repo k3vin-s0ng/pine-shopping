@@ -3,6 +3,7 @@
 import { useState, useRef, useLayoutEffect } from "react";
 import AvatarSVG from "./avatarsvg";
 import { Message } from "@/app/lib/useChat"
+import logo from './logo.png'
 
 interface ChatPanelProps {
   messages: Message[];
@@ -101,7 +102,7 @@ export default function ChatPanel({ messages, isTyping, onSend, onClear, onOpenV
             <AvatarSVG size={52} rounded="rect" />
           </div>
           <div>
-            <div className="text-[15px] font-semibold">Sicero AI Concierge</div>
+            <div className="text-[15px] font-semibold">Pine AI Assistant</div>
             <div className="flex items-center gap-1.5 text-[12px] mt-0.5" style={{ color: "#4ADE80" }}>
               <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
               Online · Ready to assist
@@ -125,7 +126,7 @@ export default function ChatPanel({ messages, isTyping, onSend, onClear, onOpenV
                 : { background: "var(--gold-dim)", border: "1px solid var(--border)", color: "var(--gold)", fontWeight: 700, fontSize: "11px" }
               }
             >
-              {msg.role === "ai" ? "✦" : "You"}
+              {msg.role === "ai" ? (<img src="/logo.png" alt="AI" className="w-5 h-5 inline" />) : "You"}
             </div>
             <div className={`max-w-[78%] ${msg.role === "user" ? "items-end flex flex-col" : ""}`}>
               <div

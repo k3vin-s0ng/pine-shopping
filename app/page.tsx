@@ -38,7 +38,7 @@ function SiceroApp() {
   function handleAuthSuccess(name: string, isNew: boolean) {
     const first = name.split(" ")[0];
     if (isNew) {
-      addAIMessage(`Welcome to Sicero, <strong>${first}</strong>! 🎉 I'm your personal shopping concierge. What are you looking for today?`, true);
+      addAIMessage(`Welcome to Pine, <strong>${first}</strong>! 🎉 I'm your personal shopping concierge. What are you looking for today?`, true);
     } else {
       addAIMessage(`Welcome back, <strong>${first}</strong>! What can I find for you today? 😊`, true);
     }
@@ -87,7 +87,7 @@ function SiceroApp() {
           <div className="text-center mb-14">
             <div className="text-[10px] font-bold tracking-[2.5px] uppercase mb-3" style={{ color: "var(--gold)" }}>Live Demo</div>
             <h2 className="font-display font-bold leading-[1.15] mb-3.5" style={{ fontSize: "clamp(28px, 4vw, 46px)" }}>
-              Talk to <span className="grad-text">Sicero</span>
+              Talk to <span className="grad-text">Pine</span>
             </h2>
             <p className="text-base max-w-[500px] mx-auto leading-[1.65]" style={{ color: "var(--text-secondary)" }}>
               Describe exactly what you want. Our AI listens, understands, and delivers real products with real buying links — instantly.

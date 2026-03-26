@@ -31,7 +31,7 @@ export function useChat() {
     {
       id: "welcome",
       role: "ai",
-      content: `Hey! I'm <strong>Sicero</strong> — your AI shopping concierge. 👋<br/><br/>Tell me what you're after and I'll pull real products with prices and buy links right now. You can also tap the avatar or 🎙 to use your voice!`,
+      content: `Hey! I'm <strong>Pine</strong> — your AI shopping assistant. 👋<br/><br/>Tell me what you're after and I'll pull real products with prices and buy links right now. You can also tap the avatar or 🎙 to use your voice!`,
       html: true,
       time: now(),
     },
