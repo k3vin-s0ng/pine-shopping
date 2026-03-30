@@ -31,7 +31,7 @@ export default function LeftPanel({ query, status, onRestart, onStop, onRefine, 
       {/* Query echo */}
       {query && (
         <div className="query-echo">
-          &ldquo;{query}&rdquo;
+          <span className="quote-mark">&ldquo;</span>{query}<span className="quote-mark">&rdquo;</span>
         </div>
       )}
 
@@ -46,8 +46,20 @@ export default function LeftPanel({ query, status, onRestart, onStop, onRefine, 
         </div>
 
         <div className="orb-controls">
-          <button className="restart-btn" onClick={onRestart}>↺ Restart</button>
-          <button className="stop-btn" onClick={onStop}>■ Stop</button>
+          <button className="ctrl-btn" onClick={onRestart}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
+            </svg>
+            <span>Restart</span>
+          </button>
+          <div className="ctrl-sep" />
+          <button className="ctrl-btn danger" onClick={onStop}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <rect x="6" y="6" width="12" height="12" rx="2"/>
+            </svg>
+            <span>Stop</span>
+          </button>
         </div>
       </div>
 

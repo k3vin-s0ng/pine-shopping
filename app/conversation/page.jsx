@@ -144,7 +144,7 @@ function ConversationView() {
           refineChips={refineChips}
         />
         <div className="conv-right">
-          <div className="conv-results">
+          <div className="cards-area">
             <ProductGrid
               products={products}
               loading={loading}

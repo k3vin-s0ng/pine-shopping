@@ -56,11 +56,13 @@ export default function ProductCard({ product, rank, reason }) {
 
         {/* AI Recommendation — populated by D6 explanation generation */}
         <div className="ai-rec">
-          <div className="ai-rec-header">
-            <span style={{ fontSize: 11 }}>🕐</span>
-            <span className="ai-rec-label">AI Recommendation</span>
+          <svg style={{width:13,height:13,flexShrink:0,marginTop:1}} viewBox="0 0 24 24" fill="none" stroke="#4A8B65" strokeWidth="1.8">
+            <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
+          </svg>
+          <div className="ai-rec-content">
+            <div className="ai-rec-label">AI Recommendation</div>
+            <div className="ai-rec-text">{displayReason}</div>
           </div>
-          <div className="ai-rec-text">{displayReason}</div>
         </div>
 
         {/* Actions */}
