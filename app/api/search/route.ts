@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
   if (intent.clarification_needed) {
     const message = intent.clarification_question || "Could you tell me a bit more about what you're looking for?";
     console.log("[POST /api/search] Clarification needed:", message);
-    return NextResponse.json({ products: [], chatResponse: message });
+    return NextResponse.json({ products: [], chatResponse: message, clarificationNeeded: true });
   }
 
   // Step 3: Use search_query from structured output directly (already incorporates all constraints)
@@ -96,5 +96,5 @@ export async function POST(request: NextRequest) {
 
   const chatResponse = intent.chat_response || "Here are the best matches I found for you!";
   console.log("[POST /api/search] Returning", products.length, "products for:", searchQuery);
-  return NextResponse.json({ products, chatResponse });
+  return NextResponse.json({ products, chatResponse, clarificationNeeded: false });
 }

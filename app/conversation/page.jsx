@@ -16,6 +16,7 @@ function ConversationView() {
   const [history, setHistory] = useState([]);
   const [products, setProducts] = useState([]);
   const [chatResponse, setChatResponse] = useState("");
+  const [clarificationNeeded, setClarificationNeeded] = useState(false);
   const [status, setStatus] = useState("Pine is thinking…");
   const [loading, setLoading] = useState(true);
   const [refineChips, setRefineChips] = useState([]);
@@ -47,6 +48,7 @@ function ConversationView() {
 
       setProducts(data.products || []);
       setChatResponse(data.chatResponse || "");
+      setClarificationNeeded(data.clarificationNeeded === true);
       setStatus("Pine is listening");
 
       // Build refine chips from the query keywords for quick follow-up
@@ -80,7 +82,7 @@ function ConversationView() {
   }
 
   function handleRefine(chipText) {
-    setBottomInput(chipText);
+    handleSubmit(chipText);
   }
 
   // Fire initial search on mount using the URL query param
@@ -112,6 +114,7 @@ function ConversationView() {
               products={products}
               loading={loading}
               chatResponse={chatResponse}
+              clarificationNeeded={clarificationNeeded}
             />
           </div>
           <BottomBar

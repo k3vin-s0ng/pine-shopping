@@ -15,9 +15,9 @@ function SkeletonCard() {
   );
 }
 
-export default function ProductGrid({ products = [], loading, chatResponse }) {
-  // Clarification path: Pine asked a question, no products to show
-  if (!loading && chatResponse && products.length === 0) {
+export default function ProductGrid({ products = [], loading, chatResponse, clarificationNeeded }) {
+  // Clarification path: LLM explicitly flagged clarification_needed — show Pine's question
+  if (!loading && clarificationNeeded) {
     return (
       <div>
         <div className="prod-grid-header">
