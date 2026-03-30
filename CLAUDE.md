@@ -142,19 +142,26 @@ The intent extraction system **must** receive the full conversation history on e
 
 ---
 
-## Key UI Components (already built)
+## Key UI Components (current state after Kevin's 2026-03-29 overhaul)
 
-- Agent avatar (`avatarsvg.tsx`) — animated SVG with idle / listening / speaking states
-- Chat panel (`chatpanel.tsx`) — message history, auto-resize textarea, voice toggle, typing indicator, quick-action chips
-- Voice input modal (`voicemodal.tsx`) — hold-to-speak, live transcript display, Done button submits
-- Product cards (`market.tsx`) — image, name, price, rating, match %, direct buy link
-- Results panel (`resultspanel.tsx`) — filter bar, product grid, empty state
-- Right detail panel (`rightpanel.tsx`) — selected product full view (minimal)
-- Auth modal (`authmodal.tsx`) — localStorage persistence (NOT production-safe)
-- Marketing landing page (`sections.tsx`)
-- Header / navbar (`header.tsx`, `generalheader.tsx`) — consolidation pending (C-05)
+> **⚠️ Major UI reset 2026-03-29:** Kevin deleted all TSX components and replaced them with a new luxury JSX design. The new components are stubs — not connected to the LLM pipeline. All prior conversational UI (chat panel, voice modal, product cards, auth) was deleted. See B-04 and B-05 in TODO.md.
 
-**Clarification flow:** The clarification modal exists but surfaces as a chat message via the `shouldSearch: false` path in the API route — not a popup. Wire `clarification_needed: true` from intent extraction into this existing path.
+**Current components (all `.jsx`, stubs only):**
+- Orb (`components/orb.jsx`) — visual orb with idle/listening CSS states. No Speech API. No processing/responding states.
+- Input bar (`components/inputbar.jsx`) — text input field. No `onSubmit` handler, not connected to LLM pipeline.
+- Hero section (`components/hero.jsx`) — layout wrapper with orb stage. Static.
+- Navbar (`components/header.jsx`) — simple nav with Collections / Discover / Journal links. Static.
+- Curated section (`components/curated.jsx`) — hardcoded static placeholder card. Not a real result component.
+- Layout (`layout.jsx`) — Playfair Display + Cormorant Garamond fonts (luxury aesthetic).
+
+**Deleted (were working in Phase 1):**
+- `avatarsvg.tsx`, `chatpanel.tsx`, `voicemodal.tsx`, `market.tsx`, `resultspanel.tsx`, `rightpanel.tsx`, `authmodal.tsx`, `sections.tsx`, `header.tsx`, `generalheader.tsx`, `button.tsx`, `layout.tsx`
+- Market page (`app/market/`) — entire route deleted.
+
+**LLM pipeline (API routes — intact):**
+- D1/D2 structured intent extraction + confidence scoring are implemented in the API route but the frontend no longer calls them. See B-04.
+
+**Clarification flow:** Previously surfaced as a chat message via `shouldSearch: false`. Chat panel is deleted — path is disconnected until a new response display is built (E-08 in TODO.md).
 
 ---
 
@@ -165,7 +172,7 @@ Affiliate-first via Skimlinks + Amazon Associates. Long-term vision is a closed 
 
 ## Coding Conventions
 
-- TypeScript strictly — no `any` types without justification
+- TypeScript strictly — no `any` types without justification. **Note:** Kevin's 2026-03-29 UI overhaul introduced `.jsx` components without type annotations. Whether to migrate these to TSX is an open decision (see B-05 in TODO.md).
 - Keep LLM prompt logic in dedicated prompt files, not inline
 - Conversation history must be passed as a typed array, not reconstructed from DOM
 - When adding a feature, check `TODO.md` for the relevant backlog item and update its status
@@ -174,7 +181,7 @@ Affiliate-first via Skimlinks + Amazon Associates. Long-term vision is a closed 
 ---
 
 ## Auth System (Current State)
-Auth via `auth.tsx` (React context + localStorage). Passwords encoded with `btoa()` — not secure, placeholder only. Replace with Kevin's backend before any real launch.
+Auth system (`authmodal.tsx`, `auth.tsx`) was deleted in Kevin's 2026-03-29 UI overhaul. There is currently no auth in the app. Rebuilding auth is deferred to Phase 4 (Kevin's backend integration) — do not add placeholder auth again.
 
 ---
 

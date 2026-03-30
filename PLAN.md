@@ -1,6 +1,6 @@
 # Pine — Product Roadmap
 
-_Last updated: 2026-03-25_
+_Last updated: 2026-03-29_
 
 ---
 
@@ -24,15 +24,17 @@ The goal is to upgrade Pine from Level 3.5 (single intent extraction call + Serp
 
 ---
 
-## Phase 1 — MVP (Complete)
+## Phase 1 — MVP (Partially Reset — See Note)
 
-- [x] LLM integration via OpenRouter (GPT-4o-mini)
-- [x] SerpAPI Google Shopping integration
-- [x] React conversational UI (avatars, bubbles, product cards, voice modal, auth modal)
-- [x] Conversation context passed correctly to intent extraction
-- [x] Price-based follow-up refinement working end-to-end
-- [x] Clarification path built (`shouldSearch: false` → chat message)
-- [x] Error state handling with mock product fallback
+> **⚠️ UI Reset (2026-03-29):** Kevin replaced the entire TypeScript component layer with a new luxury JSX redesign. All conversational UI components (chat panel, voice modal, auth modal, product cards, results panel, agent avatar, marketing sections) were deleted. The API route and LLM logic are intact, but the new UI stubs (`orb.jsx`, `inputbar.jsx`) are not connected to the pipeline. Phase 1 UI work must be rebuilt within the new design system.
+
+- [x] LLM integration via OpenRouter (GPT-4o-mini) — API route intact
+- [x] SerpAPI Google Shopping integration — API route intact
+- [ ] ~~React conversational UI (avatars, bubbles, product cards, voice modal, auth modal)~~ — **DELETED in Kevin's UI overhaul**
+- [x] Conversation context passed correctly to intent extraction — logic intact
+- [x] Price-based follow-up refinement working end-to-end — logic intact
+- [ ] ~~Clarification path built (`shouldSearch: false` → chat message)~~ — **DELETED (chatpanel gone)**
+- [ ] ~~Error state handling with mock product fallback~~ — **DELETED (chatpanel gone)**
 
 ---
 
@@ -60,11 +62,11 @@ The goal is to upgrade Pine from Level 3.5 (single intent extraction call + Serp
 - [ ] K7: SerpAPI silent fallback when scraping returns zero results or fails
 
 ### Eric — Voice + UI
-- [ ] E1: Voice input via Web Speech API (orb trigger, transcript → intent pipeline)
-- [ ] E2: Orb UI state machine (idle / listening / processing / responding animations)
+- [ ] E1: Voice input via Web Speech API (orb trigger, transcript → intent pipeline) — `orb.jsx` exists as stub, no Speech API yet
+- [ ] E2: Orb UI state machine (idle / listening / processing / responding animations) — `orb.jsx` stub has idle/listening only, no processing/responding
 - [ ] E3: Voice output via Web Speech Synthesis API (Pine speaks clarifications + explanations)
-- [ ] E4: Result cards with intent-match explanation display (3 cards max, retailer logo link)
-- [ ] E5: Typing fallback input (visually subordinate, functionally equal to voice)
+- [ ] E4: Result cards with intent-match explanation display (3 cards max, retailer logo link) — `curated.jsx` is hardcoded static placeholder, not a real result component
+- [ ] E5: Typing fallback input (visually subordinate, functionally equal to voice) — `inputbar.jsx` stub exists, no LLM connection
 
 ### Shared
 - [ ] Daniel↔Kevin handoff contract locked (query object + enriched result object schemas)
@@ -138,6 +140,7 @@ The long-term product vision is payment completing on Pine with direct retailer 
 | 2026-03-25 | Closed ecosystem payment deferred post-funding | Requires retailer agreements, legal setup, Stripe business account — not 2-week scope |
 | 2026-03-25 | retailer_sku included in K5 data contract | Preserves path to closed fulfillment without building it now |
 | 2026-03-25 | Rebranded Sicero → Pine | Navy/gold color scheme, gold pinecone logo |
+| 2026-03-29 | Kevin replaced all TSX components with new luxury JSX UI | New design direction: Playfair Display/Cormorant Garamond fonts, orb-centric layout, premium aesthetic. All conversational UI deleted. New stubs need to be wired to LLM pipeline. TypeScript dropped for JSX in component layer. Market page removed. |
 
 ---
 

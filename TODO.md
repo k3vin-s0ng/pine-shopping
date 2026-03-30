@@ -1,6 +1,6 @@
 # Pine — Active Task Board
 
-_Updated: 2026-03-25 (D1/D2 session) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
+_Updated: 2026-03-29 (Kevin UI overhaul) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
 
 ---
 
@@ -8,7 +8,8 @@ _Updated: 2026-03-25 (D1/D2 session) | Owner tags: [D] = Daniel, [K] = Kevin, [E
 
 | # | Task | Owner | Notes |
 |---|---|---|---|
-
+| B-04 | New UI stubs not connected to LLM pipeline | [K]/[D] | Kevin's `inputbar.jsx` and `orb.jsx` are disconnected stubs. D1/D2 reasoning agent (API route intact) has no frontend to call it. Chat panel, voice modal, and product cards are all deleted. The pipeline exists but nothing renders results or sends messages. Must be wired before any end-to-end testing. |
+| B-05 | TypeScript dropped for JSX in component layer | [K]/[D] | All new components are `.jsx` with no type annotations. This breaks the TypeScript-strict convention in CLAUDE.md and loses type safety on the conversation history, intent extraction output, and product card props. Decision needed: migrate new components to TSX or accept JSX for UI layer. |
 | B-02 | Daniel↔Kevin Data Agent handoff contract | [D]/[K] | Schema defined in CLAUDE.md. Needs explicit agreement from Kevin before K2+ and D5+ can be built. Priority: next team meeting. |
 | B-03 | Direct retailer URL resolution strategy | [K] | SerpAPI Google Shopping returns google.com/shopping URLs — not retailer URLs. Affiliate links (Skimlinks, Amazon Associates) require direct retailer URLs to generate commissions. Kevin must resolve this before affiliate monetization works. See K8 for resolution options. Daniel's Reasoning Agent is unaffected — it stays on SerpAPI for search; Kevin's Data Agent is responsible for returning valid `url` in enriched result objects. |
 
@@ -28,12 +29,15 @@ _Updated: 2026-03-25 (D1/D2 session) | Owner tags: [D] = Daniel, [K] = Kevin, [E
 
 | # | Task | Owner | Notes |
 |---|---|---|---|
+| E-06 | Wire `inputbar.jsx` to D1/D2 API route | [E]/[D] | **Prerequisite for everything.** `inputbar.jsx` has no `onSubmit` handler connected to the LLM pipeline. Must call `/api/chat` (or equivalent) and render results before any other E-tasks. |
+| E-07 | Build result display component (replaces deleted `market.tsx`) | [E] | New product card component in the luxury design system. Must accept Kevin's enriched result object schema. |
+| E-08 | Build chat/response display (replaces deleted `chatpanel.tsx`) | [E] | Pine's responses need to appear somewhere. New design or integrated into the hero/orb area. |
 | K1 | Data Agent: structured query intake contract | [K] | Accept typed query object from Reasoning Agent. Schema in CLAUDE.md. Agree with Daniel before building. |
 | K8 | Direct retailer URL resolution | [K] | **Blocks affiliate monetization.** Kevin to choose and implement one of: (1) SerpAPI Product Results endpoint — takes Google Shopping product ID, returns merchant seller links with direct retailer URLs; extra call per product but keeps SerpAPI as fallback. (2) Amazon Product Advertising API — returns direct Amazon URLs natively, designed for Associates program. (3) Direct scraping — Kevin's Data Agent scrapes retailer pages directly, URL is the page URL. All three valid; Kevin decides based on reliability and rate limits. Enriched result object `url` field MUST be a direct retailer URL — never a google.com/shopping URL. |
 | K2 | Retailer scraping layer | [K] | Adapt existing scraping agent. Start with Amazon + Target + 1 category retailer. Narrow and reliable beats broad and flaky. |
-| E1 | Voice input via Web Speech API | [E] | Orb tap → listening → transcript feeds D1 pipeline. Chrome desktop reliable for demo. |
-| E2 | Orb UI state machine | [E] | 4 states: idle / listening / processing / responding. Distinct animation per state. |
-| D3 | Multi-turn clarification loop | [D] | One question max per turn. Double-duty: narrows product space AND reweights soft preferences. Builds on D1/D2. |
+| E1 | Voice input via Web Speech API | [E] | Orb tap → listening → transcript feeds D1 pipeline. `orb.jsx` exists but has no Speech API. Chrome desktop reliable for demo. |
+| E2 | Orb UI state machine | [E] | 4 states: idle / listening / processing / responding. `orb.jsx` currently has idle/listening only. Add processing + responding states. |
+| D3 | Multi-turn clarification loop | [D] | One question max per turn. Double-duty: narrows product space AND reweights soft preferences. Builds on D1/D2. Blocked until UI can display Pine's responses (E-08). |
 
 ### Week 2 — Reasoning + Integration
 
@@ -88,7 +92,7 @@ _Updated: 2026-03-25 (D1/D2 session) | Owner tags: [D] = Daniel, [K] = Kevin, [E
 | C-01 | Shop / Plan mode toggle | [E] | Both |
 | C-02 | Plan summary card component | [E] | Plan |
 | C-03 | Product card — "Add to Plan" button | [E] | Plan |
-| C-05 | Deduplicate generalheader.tsx vs header.tsx | [D] | Low priority |
+| C-05 | ~~Deduplicate generalheader.tsx vs header.tsx~~ | — | Resolved — both deleted in Kevin's UI overhaul. `header.jsx` is the only header now. |
 | I4 | Right detail panel full implementation | [E] | Currently minimal |
 
 ### Infrastructure & Backend
@@ -112,21 +116,21 @@ _Updated: 2026-03-25 (D1/D2 session) | Owner tags: [D] = Daniel, [K] = Kevin, [E
 
 | # | Task | Completed |
 |---|---|---|
-| ✓ | LLM integration (OpenRouter + GPT-4o-mini) | Phase 1 |
-| ✓ | SerpAPI Google Shopping integration | Phase 1 |
-| ✓ | React UI: agent avatars, speech bubbles, product cards | Phase 1 |
-| ✓ | Clarification modal component | Phase 1 |
+| ✓ | LLM integration (OpenRouter + GPT-4o-mini) — API route intact | Phase 1 |
+| ✓ | SerpAPI Google Shopping integration — API route intact | Phase 1 |
+| ✓ | React UI: agent avatars, speech bubbles, product cards | Phase 1 — **⚠️ deleted in Kevin's UI overhaul 2026-03-29** |
+| ✓ | Clarification modal component | Phase 1 — **⚠️ deleted in Kevin's UI overhaul 2026-03-29** |
 | ✓ | 35-feature backlog spreadsheet + PM structure | Setup |
-| ✓ | Pass full conversation history to intent extraction (B-02 / I-01) | 2026-03-15 |
-| ✓ | Structured intent schema — IntentResult TypeScript type (L-01) | 2026-03-15 |
-| ✓ | Typing indicator and loading state — isTyping / isSearching (C-04) | 2026-03-15 |
-| ✓ | Price filter layer — min/max on SerpAPI results and client-side (partial S-01) | 2026-03-15 |
-| ✓ | Price filter direction — "over $X" vs "under $X" without false-positives on model numbers | 2026-03-15 |
-| ✓ | Original products ref — subsequent filters re-apply to original results, not prior filtered set | 2026-03-15 |
-| ✓ | Voice input modal — hold-to-speak, transcript display, Done button submits | 2026-03-15 |
-| ✓ | Auth system — sign in / sign up modal with localStorage persistence | 2026-03-15 |
-| ✓ | Marketing landing page — hero, features, how-it-works, testimonials, footer | 2026-03-15 |
-| ✓ | Removed non-functional Buy Now / Details buttons from product cards | 2026-03-15 |
+| ✓ | Pass full conversation history to intent extraction (B-02 / I-01) — logic intact in API route | 2026-03-15 |
+| ✓ | Structured intent schema — IntentResult TypeScript type (L-01) — intact in API route | 2026-03-15 |
+| ✓ | Typing indicator and loading state — isTyping / isSearching (C-04) | 2026-03-15 — **⚠️ deleted** |
+| ✓ | Price filter layer — min/max on SerpAPI results and client-side (partial S-01) | 2026-03-15 — **⚠️ client-side deleted** |
+| ✓ | Price filter direction — "over $X" vs "under $X" without false-positives on model numbers | 2026-03-15 — **⚠️ deleted** |
+| ✓ | Original products ref — subsequent filters re-apply to original results, not prior filtered set | 2026-03-15 — **⚠️ deleted** |
+| ✓ | Voice input modal — hold-to-speak, transcript display, Done button submits | 2026-03-15 — **⚠️ deleted** |
+| ✓ | Auth system — sign in / sign up modal with localStorage persistence | 2026-03-15 — **⚠️ deleted** |
+| ✓ | Marketing landing page — hero, features, how-it-works, testimonials, footer | 2026-03-15 — **⚠️ deleted** |
+| ✓ | Removed non-functional Buy Now / Details buttons from product cards | 2026-03-15 — **⚠️ product cards deleted** |
 | ✓ | Rejected travel pivot — documented rationale | 2026-03-25 |
 | ✓ | Affiliate monetization strategy finalized (Skimlinks + Amazon Associates) | 2026-03-25 |
 | ✓ | Pine rebrand from Sicero — navy/gold, pinecone logo | 2026-03-25 |
@@ -135,6 +139,7 @@ _Updated: 2026-03-25 (D1/D2 session) | Owner tags: [D] = Daniel, [K] = Kevin, [E
 | ✓ | B-01: OpenRouter API key resolved — live LLM calls working | 2026-03-26 |
 | ✓ | D1: Structured intent extraction — IntentExtractionResult type + LLM prompt refactor | 2026-03-26 |
 | ✓ | D2: Intent confidence scoring (0.0–1.0) + clarification gate wired into shouldSearch path | 2026-03-26 |
+| ✓ | Kevin luxury UI redesign — new orb, inputbar, hero, header, curated stubs in JSX | 2026-03-29 |
 
 ---
 
