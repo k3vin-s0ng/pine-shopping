@@ -1,6 +1,6 @@
 # Pine — Active Task Board
 
-_Updated: 2026-03-29 (B-04 resolved — conversation page wired) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
+_Updated: 2026-03-29 (D3 + D4 implemented) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
 
 ---
 
@@ -33,7 +33,6 @@ _Updated: 2026-03-29 (B-04 resolved — conversation page wired) | Owner tags: [
 | K2 | Retailer scraping layer | [K] | Adapt existing scraping agent. Start with Amazon + Target + 1 category retailer. Narrow and reliable beats broad and flaky. |
 | E1 | Voice input via Web Speech API | [E] | Orb tap → listening → transcript feeds D1 pipeline. `orb.jsx` exists but has no Speech API. Chrome desktop reliable for demo. |
 | E2 | Orb UI state machine | [E] | 4 states: idle / listening / processing / responding. `orb.jsx` currently has idle/listening only. Add processing + responding states. |
-| D3 | Multi-turn clarification loop | [D] | One question max per turn. Double-duty: narrows product space AND reweights soft preferences. Builds on D1/D2. Blocked until UI can display Pine's responses (E-08). |
 
 ### Week 2 — Reasoning + Integration
 
@@ -140,6 +139,13 @@ _Updated: 2026-03-29 (B-04 resolved — conversation page wired) | Owner tags: [
 | ✓ | E-06: `inputbar.jsx` navigates to `/conversation?q=…` on submit (Enter or send button) | 2026-03-29 |
 | ✓ | E-07: `ProductCard.jsx` + `ProductGrid.jsx` built in luxury design system | 2026-03-29 |
 | ✓ | E-08: `LeftPanel.jsx` echoes query + status; `ProductGrid` renders clarification when no products | 2026-03-29 |
+| ✓ | Bug: clarification bubble shown on empty-product searches — fixed with explicit `clarificationNeeded` flag from API | 2026-03-29 |
+| ✓ | Bug: current user message duplicated in every LLM call — fixed by sending `priorHistory` (not `newHistory`) to API | 2026-03-29 |
+| ✓ | Refine chips now submit directly to AI on click (no manual Enter required) | 2026-03-29 |
+| ✓ | D3: Preference accumulator implemented — `accumulatedIntent` state merges `hard_constraints` and `soft_preferences` forward across turns without dropping prior constraints. `mergeIntent()` exported from `intentExtraction.ts` (server-side reference). Client-side merge duplicated in `page.jsx`. `accumulatedIntent` sent to API on every call; clears on Restart. | 2026-03-30 |
+| ✓ | D3: ACCUMULATION RULE added to prompt — model instructed to carry all prior constraints forward in each turn's output. Refinement-turn confidence floor (≥0.7 when category + ≥1 constraint established) added. B-06 and B-07 resolved. | 2026-03-30 |
+| ✓ | D4: `user_expertise` field added to `IntentExtractionResult` — "novice" / "intermediate" / "expert" derived from vocabulary. USER EXPERTISE CLASSIFICATION section added to prompt with per-level clarification question style rules. | 2026-03-30 |
+| ✓ | API route now returns `intent` object on all response paths (clarification, search, SerpAPI error) — consumed by client-side accumulator. Accepts `accumulatedIntent` from frontend for D5 utility scoring (logged for now). | 2026-03-30 |
 
 ---
 

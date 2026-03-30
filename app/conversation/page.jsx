@@ -22,6 +22,9 @@ function ConversationView() {
   const [refineChips, setRefineChips] = useState([]);
   const [micActive, setMicActive] = useState(false);
   const [bottomInput, setBottomInput] = useState("");
+  // D3: accumulated intent — merges hard_constraints and soft_preferences forward across turns
+  // Client-side merge mirrors mergeIntent() in intentExtraction.ts (server-only, not importable here)
+  const [accumulatedIntent, setAccumulatedIntent] = useState({});
 
   async function handleSubmit(text) {
     if (!text.trim()) return;
@@ -40,13 +43,41 @@ function ConversationView() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // Send priorHistory (without current message) — intentExtraction.ts appends userMessage itself
-        body: JSON.stringify({ query: text, history: priorHistory }),
+        body: JSON.stringify({ query: text, history: priorHistory, accumulatedIntent }),
       });
 
       const data = await res.json();
 
       if (data.chatResponse) {
         setHistory((prev) => [...prev, { role: "ai", content: data.chatResponse }]);
+      }
+
+      // D3: merge new intent into accumulated state so constraints carry forward across turns
+      // Mirrors mergeIntent() in intentExtraction.ts — keep in sync if merge strategy changes
+      if (data.intent) {
+        setAccumulatedIntent((prev) => ({
+          ...data.intent,
+          hard_constraints: {
+            ...prev.hard_constraints,
+            ...data.intent.hard_constraints,
+            must_have_attributes: [
+              ...new Set([
+                ...(prev.hard_constraints?.must_have_attributes ?? []),
+                ...(data.intent.hard_constraints?.must_have_attributes ?? []),
+              ]),
+            ],
+          },
+          soft_preferences: {
+            ...prev.soft_preferences,
+            ...data.intent.soft_preferences,
+            vibe_keywords: [
+              ...new Set([
+                ...(prev.soft_preferences?.vibe_keywords ?? []),
+                ...(data.intent.soft_preferences?.vibe_keywords ?? []),
+              ]),
+            ],
+          },
+        }));
       }
 
       setProducts(data.products || []);
@@ -76,6 +107,7 @@ function ConversationView() {
   }
 
   function handleRestart() {
+    setAccumulatedIntent({});
     router.push("/");
   }
 

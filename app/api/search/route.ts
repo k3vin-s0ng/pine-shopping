@@ -52,7 +52,12 @@ async function callSerpAPI(searchQuery: string): Promise<any[]> {
 
 // POST: LLM intent extraction → refined SerpAPI query → filtered products
 export async function POST(request: NextRequest) {
-  const { query, history } = await request.json();
+  const { query, history, accumulatedIntent } = await request.json();
+  // accumulatedIntent is the client-side merged state from prior turns — logged here for
+  // observability; will be consumed directly by D5 utility scoring once Kevin's Data Agent ships
+  if (accumulatedIntent && Object.keys(accumulatedIntent).length > 0) {
+    console.log("[POST /api/search] Accumulated intent:", JSON.stringify(accumulatedIntent));
+  }
 
   if (!query) return NextResponse.json({ error: "Query required" }, { status: 400 });
   if (!SERP_API_KEY) return NextResponse.json({ error: "SERP_API_KEY not configured" }, { status: 500 });
@@ -64,7 +69,7 @@ export async function POST(request: NextRequest) {
   if (intent.clarification_needed) {
     const message = intent.clarification_question || "Could you tell me a bit more about what you're looking for?";
     console.log("[POST /api/search] Clarification needed:", message);
-    return NextResponse.json({ products: [], chatResponse: message, clarificationNeeded: true });
+    return NextResponse.json({ products: [], chatResponse: message, clarificationNeeded: true, intent });
   }
 
   // Step 3: Use search_query from structured output directly (already incorporates all constraints)
@@ -77,7 +82,7 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error("[POST /api/search] SerpAPI failed:", err);
     return NextResponse.json(
-      { error: "Search service unavailable", products: [], chatResponse: intent.chat_response || "" },
+      { error: "Search service unavailable", products: [], chatResponse: intent.chat_response || "", intent },
       { status: 502 }
     );
   }
@@ -96,5 +101,5 @@ export async function POST(request: NextRequest) {
 
   const chatResponse = intent.chat_response || "Here are the best matches I found for you!";
   console.log("[POST /api/search] Returning", products.length, "products for:", searchQuery);
-  return NextResponse.json({ products, chatResponse, clarificationNeeded: false });
+  return NextResponse.json({ products, chatResponse, clarificationNeeded: false, intent });
 }

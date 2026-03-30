@@ -1,6 +1,6 @@
 # Pine — Product Roadmap
 
-_Last updated: 2026-03-29_
+_Last updated: 2026-03-30 (D3 + D4 session)_
 
 ---
 
@@ -43,10 +43,10 @@ The goal is to upgrade Pine from Level 3.5 (single intent extraction call + Serp
 **Exit criteria:** Pine extracts structured intent, scores confidence, asks smart clarifying questions when needed, scores results against a preference vector, and explains why each recommendation matches.
 
 ### Daniel — Reasoning Agent
-- [ ] D1: Structured intent extraction → `{ hard_constraints, soft_preferences, confidence_score, clarification_needed }`
-- [ ] D2: Intent confidence scoring (0.0–1.0 threshold gates clarification vs. search)
-- [ ] D3: Multi-turn clarification loop (one question max per turn, double-duty principle)
-- [ ] D4: Dialog adaptation by user expertise level (vibe vs. spec vocabulary)
+- [x] D1: Structured intent extraction → `{ hard_constraints, soft_preferences, confidence_score, clarification_needed }`
+- [x] D2: Intent confidence scoring (0.0–1.0 threshold gates clarification vs. search)
+- [x] D3: Multi-turn clarification loop — preference accumulator (`accumulatedIntent`) merges constraints across turns; ACCUMULATION RULE + refinement-turn confidence floor added to prompt
+- [x] D4: Dialog adaptation by user expertise level — `user_expertise` field + USER EXPERTISE CLASSIFICATION section in prompt; clarification question style adapts per level
 - [ ] D5: Personalized utility scoring against soft preference vector
 - [ ] D6: Intent-match explanation generation per top 3 results
 - [ ] D7: Constraint relaxation logic when Data Agent returns sparse results
@@ -65,8 +65,8 @@ The goal is to upgrade Pine from Level 3.5 (single intent extraction call + Serp
 - [ ] E1: Voice input via Web Speech API (orb trigger, transcript → intent pipeline) — `orb.jsx` exists as stub, no Speech API yet
 - [ ] E2: Orb UI state machine (idle / listening / processing / responding animations) — `orb.jsx` stub has idle/listening only, no processing/responding
 - [ ] E3: Voice output via Web Speech Synthesis API (Pine speaks clarifications + explanations)
-- [ ] E4: Result cards with intent-match explanation display (3 cards max, retailer logo link) — `curated.jsx` is hardcoded static placeholder, not a real result component
-- [ ] E5: Typing fallback input (visually subordinate, functionally equal to voice) — `inputbar.jsx` stub exists, no LLM connection
+- [x] E4: Result cards with intent-match explanation display (3 cards max, retailer logo link) — `ProductCard.jsx` + `ProductGrid.jsx` live in `/conversation`; D6 explanation slot stubbed with TODO
+- [x] E5: Typing fallback input (visually subordinate, functionally equal to voice) — `inputbar.jsx` navigates to `/conversation`, `BottomBar.jsx` submits follow-ups to API
 
 ### Shared
 - [ ] Daniel↔Kevin handoff contract locked (query object + enriched result object schemas)
@@ -141,6 +141,10 @@ The long-term product vision is payment completing on Pine with direct retailer 
 | 2026-03-25 | retailer_sku included in K5 data contract | Preserves path to closed fulfillment without building it now |
 | 2026-03-25 | Rebranded Sicero → Pine | Navy/gold color scheme, gold pinecone logo |
 | 2026-03-29 | Kevin replaced all TSX components with new luxury JSX UI | New design direction: Playfair Display/Cormorant Garamond fonts, orb-centric layout, premium aesthetic. All conversational UI deleted. New stubs need to be wired to LLM pipeline. TypeScript dropped for JSX in component layer. Market page removed. |
+| 2026-03-29 | Conversation page (`/conversation`) built and wired to `/api/search` | `LeftPanel`, `ProductCard`, `ProductGrid`, `BottomBar` all live. History passes correctly on every turn. `inputbar.jsx` navigates to conversation on submit. Two bugs found and fixed this session: clarification bubble mis-trigger and user-message duplication in LLM context. |
+| 2026-03-29 | History duplication root cause identified | `newHistory` (containing current message) was sent to API; `extractIntent` then appended the same message again. Fixed by sending `priorHistory` to API. Impact: every prior LLM call had the current user message doubled, degrading multi-turn constraint accumulation. |
+| 2026-03-30 | D3 preference accumulator made explicit via mergeIntent | Previously constraints carried forward by accident via history re-reading — unreliable if LLM missed a detail. Now `accumulatedIntent` state explicitly unions `hard_constraints` and `soft_preferences` across turns. `mergeIntent()` exported from server module as canonical reference; client-side logic in `page.jsx` mirrors it. |
+| 2026-03-30 | D4 expertise classification added | `user_expertise` ("novice" / "intermediate" / "expert") derived from vocabulary, not confidence score. Drives clarification question tone: lifestyle-framed for novice, balanced for intermediate, spec-framed for expert. Never ask vibe questions to expert users. |
 
 ---
 

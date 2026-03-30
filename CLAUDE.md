@@ -138,30 +138,45 @@ UI (Eric)
 ---
 
 ### Critical Constraint: Context Management
-The intent extraction system **must** receive the full conversation history on every turn. A message like "only show gaming ones" has zero meaning without prior context. **Root cause identified and fixed:** the intent extraction function was previously not being passed conversation history — it was operating stateless. Never strip or omit conversation history before the LLM call. This is a known past failure point.
+The intent extraction system **must** receive the full conversation history on every turn. A message like "only show gaming ones" has zero meaning without prior context. **Root cause identified and fixed (2026-03-15):** the intent extraction function was previously not being passed conversation history — it was operating stateless. Never strip or omit conversation history before the LLM call. This is a known past failure point.
+
+**Second history bug found and fixed (2026-03-29):** `conversation/page.jsx` was sending `newHistory` (which already contained the current user message) to the API. `extractIntent` then also appended `userMessage` at the end of the message array. Result: every user message appeared twice in the LLM context, corrupting turn structure. Fix: send `priorHistory` (snapshot before adding current message) to the API. `extractIntent` appends the current message exactly once. Do not revert this pattern.
+
+**D3 preference accumulator (2026-03-30):** Constraint accumulation is now explicit. `accumulatedIntent` state in `page.jsx` merges `hard_constraints` and `soft_preferences` forward on every turn using inline merge logic that mirrors `mergeIntent()` in `intentExtraction.ts`. The ACCUMULATION RULE in the prompt instructs the model to reproduce all prior constraints in its output. Refinement turns (category already established) now score ≥ 0.7 by prompt rule. `accumulatedIntent` is sent to the API on every call and clears on Restart. The server-side `mergeIntent()` is exported for future use (D5 utility scoring).
 
 ---
 
-## Key UI Components (current state after Kevin's 2026-03-29 overhaul)
+## Key UI Components (current state — 2026-03-29)
 
-> **⚠️ Major UI reset 2026-03-29:** Kevin deleted all TSX components and replaced them with a new luxury JSX design. The new components are stubs — not connected to the LLM pipeline. All prior conversational UI (chat panel, voice modal, product cards, auth) was deleted. See B-04 and B-05 in TODO.md.
+**Landing page components (all `.jsx`, Kevin's luxury design):**
+- Orb (`components/orb.jsx`) — visual orb, idle/listening CSS states. No Speech API yet (E1 pending).
+- Input bar (`components/inputbar.jsx`) — navigates to `/conversation?q=…` on Enter or send. **Wired.**
+- Hero section (`components/hero.jsx`) — layout wrapper with orb stage.
+- Navbar (`components/header.jsx`) — fixed 58px nav, shared across landing and conversation.
+- Curated section (`components/curated.jsx`) — static placeholder, not a real result component.
 
-**Current components (all `.jsx`, stubs only):**
-- Orb (`components/orb.jsx`) — visual orb with idle/listening CSS states. No Speech API. No processing/responding states.
-- Input bar (`components/inputbar.jsx`) — text input field. No `onSubmit` handler, not connected to LLM pipeline.
-- Hero section (`components/hero.jsx`) — layout wrapper with orb stage. Static.
-- Navbar (`components/header.jsx`) — simple nav with Collections / Discover / Journal links. Static.
-- Curated section (`components/curated.jsx`) — hardcoded static placeholder card. Not a real result component.
-- Layout (`layout.jsx`) — Playfair Display + Cormorant Garamond fonts (luxury aesthetic).
+**Conversation page (`app/conversation/page.jsx`) — fully wired to `/api/search`:**
+- `LeftPanel.jsx` — status dot, query echo (Cormorant italic), small orb, restart/stop controls, refine chips (auto-generated from result categories; clicking submits directly to API)
+- `ProductGrid.jsx` — 3 states: loading skeletons / clarification bubble (when `clarificationNeeded: true`) / 3-column product cards
+- `ProductCard.jsx` — image, rank badge, price badge, category, name, description, AI recommendation slot (D6 stub), "View at [retailer]" link
+- `BottomBar.jsx` — nav tabs (visual only), mic button (E1 stub), text input wired to `handleSubmit`
+
+**API route (`app/api/search/route.ts`):**
+- Returns `{ products, chatResponse, clarificationNeeded: boolean, intent }` — `clarificationNeeded` is explicit; `intent` is the full extraction result for client-side accumulation
+- Accepts `accumulatedIntent` from request body — logged for observability, will be consumed by D5
+- Price filtering applied post-SerpAPI against `hard_constraints.budget_ceiling` / `budget_floor`
+- `must_have_attributes` filter applied if present
+
+**Prompt (`app/lib/prompts/intentExtractionPrompt.ts`):**
+- D1 + D2 + D3 + D4 implemented
+- `user_expertise: "novice" | "intermediate" | "expert"` — vocabulary-derived, drives clarification question style
+- ACCUMULATION RULE: model instructed to reproduce all prior constraints in every output
+- REFINEMENT TURN RULE: confidence floor ≥ 0.7 when category + ≥1 constraint already established
+- USER EXPERTISE CLASSIFICATION: per-level clarification tone (lifestyle / balanced / spec-framed)
 
 **Deleted (were working in Phase 1):**
 - `avatarsvg.tsx`, `chatpanel.tsx`, `voicemodal.tsx`, `market.tsx`, `resultspanel.tsx`, `rightpanel.tsx`, `authmodal.tsx`, `sections.tsx`, `header.tsx`, `generalheader.tsx`, `button.tsx`, `layout.tsx`
 - Market page (`app/market/`) — entire route deleted.
-
-**LLM pipeline (API routes — intact):**
-- D1/D2 structured intent extraction + confidence scoring are implemented in the API route but the frontend no longer calls them. See B-04.
-
-**Clarification flow:** Previously surfaced as a chat message via `shouldSearch: false`. Chat panel is deleted — path is disconnected until a new response display is built (E-08 in TODO.md).
 
 ---
 
