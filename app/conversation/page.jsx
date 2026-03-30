@@ -28,7 +28,9 @@ function ConversationView() {
     setStatus("Pine is thinking…");
     setLoading(true);
 
-    // Add user message to history BEFORE the API call (CLAUDE.md: never drop history)
+    // Snapshot prior history BEFORE mutating state — sent to API so extractIntent
+    // can append the current message once. newHistory is only used for state.
+    const priorHistory = [...history];
     const newHistory = [...history, { role: "user", content: text }];
     setHistory(newHistory);
     setQuery(text);
@@ -37,7 +39,8 @@ function ConversationView() {
       const res = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: text, history: newHistory }),
+        // Send priorHistory (without current message) — intentExtraction.ts appends userMessage itself
+        body: JSON.stringify({ query: text, history: priorHistory }),
       });
 
       const data = await res.json();
