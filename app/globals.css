@@ -55,6 +55,7 @@ body {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--pine);
+  text-decoration: none;
 }
 
 .nav-links {
@@ -601,6 +602,7 @@ body {
   gap: 18px;
   flex: 1;
   min-height: 0;
+  margin-top: 10px;
 }
 
 /* ─── Product Card ───────────────────────────── */
