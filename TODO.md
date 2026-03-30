@@ -1,6 +1,6 @@
 # Pine — Active Task Board
 
-_Updated: 2026-03-29 (Kevin UI overhaul) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
+_Updated: 2026-03-29 (B-04 resolved — conversation page wired) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
 
 ---
 
@@ -8,7 +8,6 @@ _Updated: 2026-03-29 (Kevin UI overhaul) | Owner tags: [D] = Daniel, [K] = Kevin
 
 | # | Task | Owner | Notes |
 |---|---|---|---|
-| B-04 | New UI stubs not connected to LLM pipeline | [K]/[D] | Kevin's `inputbar.jsx` and `orb.jsx` are disconnected stubs. D1/D2 reasoning agent (API route intact) has no frontend to call it. Chat panel, voice modal, and product cards are all deleted. The pipeline exists but nothing renders results or sends messages. Must be wired before any end-to-end testing. |
 | B-05 | TypeScript dropped for JSX in component layer | [K]/[D] | All new components are `.jsx` with no type annotations. This breaks the TypeScript-strict convention in CLAUDE.md and loses type safety on the conversation history, intent extraction output, and product card props. Decision needed: migrate new components to TSX or accept JSX for UI layer. |
 | B-02 | Daniel↔Kevin Data Agent handoff contract | [D]/[K] | Schema defined in CLAUDE.md. Needs explicit agreement from Kevin before K2+ and D5+ can be built. Priority: next team meeting. |
 | B-03 | Direct retailer URL resolution strategy | [K] | SerpAPI Google Shopping returns google.com/shopping URLs — not retailer URLs. Affiliate links (Skimlinks, Amazon Associates) require direct retailer URLs to generate commissions. Kevin must resolve this before affiliate monetization works. See K8 for resolution options. Daniel's Reasoning Agent is unaffected — it stays on SerpAPI for search; Kevin's Data Agent is responsible for returning valid `url` in enriched result objects. |
@@ -29,9 +28,6 @@ _Updated: 2026-03-29 (Kevin UI overhaul) | Owner tags: [D] = Daniel, [K] = Kevin
 
 | # | Task | Owner | Notes |
 |---|---|---|---|
-| E-06 | Wire `inputbar.jsx` to D1/D2 API route | [E]/[D] | **Prerequisite for everything.** `inputbar.jsx` has no `onSubmit` handler connected to the LLM pipeline. Must call `/api/chat` (or equivalent) and render results before any other E-tasks. |
-| E-07 | Build result display component (replaces deleted `market.tsx`) | [E] | New product card component in the luxury design system. Must accept Kevin's enriched result object schema. |
-| E-08 | Build chat/response display (replaces deleted `chatpanel.tsx`) | [E] | Pine's responses need to appear somewhere. New design or integrated into the hero/orb area. |
 | K1 | Data Agent: structured query intake contract | [K] | Accept typed query object from Reasoning Agent. Schema in CLAUDE.md. Agree with Daniel before building. |
 | K8 | Direct retailer URL resolution | [K] | **Blocks affiliate monetization.** Kevin to choose and implement one of: (1) SerpAPI Product Results endpoint — takes Google Shopping product ID, returns merchant seller links with direct retailer URLs; extra call per product but keeps SerpAPI as fallback. (2) Amazon Product Advertising API — returns direct Amazon URLs natively, designed for Associates program. (3) Direct scraping — Kevin's Data Agent scrapes retailer pages directly, URL is the page URL. All three valid; Kevin decides based on reliability and rate limits. Enriched result object `url` field MUST be a direct retailer URL — never a google.com/shopping URL. |
 | K2 | Retailer scraping layer | [K] | Adapt existing scraping agent. Start with Amazon + Target + 1 category retailer. Narrow and reliable beats broad and flaky. |
@@ -140,6 +136,10 @@ _Updated: 2026-03-29 (Kevin UI overhaul) | Owner tags: [D] = Daniel, [K] = Kevin
 | ✓ | D1: Structured intent extraction — IntentExtractionResult type + LLM prompt refactor | 2026-03-26 |
 | ✓ | D2: Intent confidence scoring (0.0–1.0) + clarification gate wired into shouldSearch path | 2026-03-26 |
 | ✓ | Kevin luxury UI redesign — new orb, inputbar, hero, header, curated stubs in JSX | 2026-03-29 |
+| ✓ | B-04: `/conversation` page created, wired to `/api/search` with full history passing | 2026-03-29 |
+| ✓ | E-06: `inputbar.jsx` navigates to `/conversation?q=…` on submit (Enter or send button) | 2026-03-29 |
+| ✓ | E-07: `ProductCard.jsx` + `ProductGrid.jsx` built in luxury design system | 2026-03-29 |
+| ✓ | E-08: `LeftPanel.jsx` echoes query + status; `ProductGrid` renders clarification when no products | 2026-03-29 |
 
 ---
 
