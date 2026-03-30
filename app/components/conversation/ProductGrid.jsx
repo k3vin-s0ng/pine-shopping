@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import ProductCard from "./ProductCard";
 
 function SkeletonCard() {
@@ -16,6 +17,12 @@ function SkeletonCard() {
 }
 
 export default function ProductGrid({ products = [], loading, chatResponse, clarificationNeeded }) {
+  const [showAll, setShowAll] = useState(false);
+
+  useEffect(() => {
+    setShowAll(false);
+  }, [products]);
+
   // Clarification path: LLM explicitly flagged clarification_needed — show Pine's question
   if (!loading && clarificationNeeded) {
     return (
@@ -65,13 +72,25 @@ export default function ProductGrid({ products = [], loading, chatResponse, clar
     );
   }
 
-  const visible = products.slice(0, 3);
+  const visible = showAll ? products : products.slice(0, 3);
 
   return (
     <div>
       <div className="prod-grid-header">
         <span className="prod-grid-label">Curated for this conversation</span>
-        <span className="prod-count">{visible.length} of {products.length}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span className="prod-count">
+            {showAll ? products.length : Math.min(3, products.length)} of {products.length}
+          </span>
+          {products.length > 3 && (
+            <button
+              className="see-all-btn"
+              onClick={() => setShowAll(s => !s)}
+            >
+              {showAll ? 'Show less' : 'See all'}
+            </button>
+          )}
+        </div>
       </div>
       <div className="prod-grid">
         {visible.map((product, i) => (
