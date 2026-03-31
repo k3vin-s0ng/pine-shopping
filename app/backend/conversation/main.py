@@ -1,163 +1,275 @@
-import sounddevice as sd
-import numpy as np
-import wave
+from __future__ import annotations
+
+import base64
 import os
-import time
-from datetime import datetime
-import whisper
-from pydub import AudioSegment
+import shutil
+import sys
 import tempfile
-import re
- 
-RECORDING_DURATION = 3
-SAMPLE_RATE = 44100
+import wave
+from datetime import datetime
+from pathlib import Path
+from dotenv import load_dotenv
+
+import numpy as np
+import requests
+import sounddevice as sd
+from fastapi import FastAPI, File, HTTPException, UploadFile
+
+app = FastAPI()
+load_dotenv()
+
+# -----------------------------
+# Config
+# -----------------------------
+SAMPLE_RATE = 16000
 CHANNELS = 1
-SPIKE_THRESHOLD = 2000
+RECORDING_DURATION = 3  # seconds per chunk
+SPIKE_THRESHOLD = 500  # adjust for your mic
 OUTPUT_DIR = "recordings"
-WHISPER_MODEL = whisper.load_model("base")
+
+API_KEY = os.getenv("OPENROUTER_API_KEY", default=None)
+MODEL_NAME = "google/gemini-2.0-flash-lite-001"
 
 
-FRAMES_PER_RECORDING = SAMPLE_RATE*RECORDING_DURATION
-
-# USED TO SEE AUDIO SPIKES AND SEE WHETHER OR NOT THE PERSON IS TALKING OR NOT
+# -----------------------------
+# Audio helpers
+# -----------------------------
 def audio_spike(data: np.ndarray) -> float:
-    return float(np.max(np.abs(data.astype(np.float64))))
+    """
+    Returns RMS level of the chunk.
+    This is usually more stable than max-abs peak detection.
+    """
+    x = data.astype(np.float64)
+    return float(np.sqrt(np.mean(x * x)))
 
-#THIS IS THE 3 SECOND RECORDING PART OF THE CODE
+
 def record_chunk() -> np.ndarray:
+    """
+    Record a single chunk of audio.
+    Returns a 1D int16 array.
+    """
     audio = sd.rec(
         int(SAMPLE_RATE * RECORDING_DURATION),
         samplerate=SAMPLE_RATE,
         channels=CHANNELS,
         dtype="int16",
     )
-    sd.wait()  # block until recording is done
+    sd.wait()
     return audio.flatten()
 
 
-#This is temporary, will be changed to combine chunks or smth
-def save_chunk(data: np.ndarray, index:int):
+def save_chunk(data: np.ndarray, index: int) -> str:
+    """
+    Save a single chunk as WAV.
+    """
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = os.path.join(OUTPUT_DIR, f"spike_{timestamp}_{index:03d}.wav")
-    with wave.open(filename, "w") as wf:
+
+    with wave.open(filename, "wb") as wf:
         wf.setnchannels(CHANNELS)
-        wf.setsampwidth(2)   # 16-bit = 2 bytes
+        wf.setsampwidth(2)  # int16 = 2 bytes
         wf.setframerate(SAMPLE_RATE)
         wf.writeframes(data.tobytes())
+
     return filename
 
 
-def transcribe_audio_snippets(audio_files: list[str], model_size: str = "base") -> str:
+def merge_wav_files(audio_files: list[str], merged_path: str) -> str:
     """
-    Transcribes a list of audio snippet file paths and stitches them
-    into a single sentence.
-
-    Args:
-        audio_files: Ordered list of audio file paths (e.g. ["clip_0.wav", "clip_1.wav"])
-        model_size:  Whisper model to use — "tiny", "base", "small", "medium", "large"
-                     Larger = more accurate but slower.
-
-    Returns:
-        A single stitched string of all transcribed audio.
+    Merge multiple WAV files into one WAV file.
+    Assumes all files have the same format:
+    - same sample rate
+    - same channels
+    - same sample width
     """
     if not audio_files:
-        return ""
+        raise ValueError("No audio files provided to merge.")
 
-    # --- Option A: Transcribe each snippet individually then join ---
-    transcripts = []
-    for path in audio_files:
-        result = WHISPER_MODEL.transcribe(path)
-        text = result["text"].strip()
-        if text:
-            transcripts.append(text)
+    with wave.open(audio_files[0], "rb") as first:
+        params = first.getparams()
+        nchannels = first.getnchannels()
+        sampwidth = first.getsampwidth()
+        framerate = first.getframerate()
+        comptype = first.getcomptype()
+        compname = first.getcompname()
 
-    stitched = " ".join(transcripts)
+    with wave.open(merged_path, "wb") as out:
+        out.setnchannels(nchannels)
+        out.setsampwidth(sampwidth)
+        out.setframerate(framerate)
+        out.setcomptype(comptype, compname)
 
-    # Clean up punctuation boundaries between clips
-    # e.g. "Hello world.  How are you." → "Hello world. How are you."
-    
-    stitched = re.sub(r'\s+', ' ', stitched).strip()
+        for path in audio_files:
+            with wave.open(path, "rb") as wf:
+                if (
+                    wf.getnchannels() != nchannels
+                    or wf.getsampwidth() != sampwidth
+                    or wf.getframerate() != framerate
+                    or wf.getcomptype() != comptype
+                ):
+                    raise ValueError(f"Audio format mismatch in file: {path}")
 
-    return stitched
+                out.writeframes(wf.readframes(wf.getnframes()))
+
+    return merged_path
 
 
-def transcribe_by_merging(audio_files: list[str], model_size: str = "base") -> str:
+# -----------------------------
+# Transcription
+# -----------------------------
+def transcribe_wav_file(audio_path: str) -> str:
     """
-    Alternative approach: merges all audio clips into one file first,
-    then transcribes in a single pass. Better for context continuity.
-
-    Requires: pydub + ffmpeg installed on the system.
+    Send a WAV file to OpenRouter for transcription.
+    Assumes the API supports input_audio in chat completions.
     """
-    if not audio_files:
-        return ""
+    if not API_KEY:
+        raise RuntimeError("OPENROUTER_API_KEY is not set.")
 
-    # Merge all clips into one AudioSegment
-    combined = AudioSegment.empty()
-    for path in audio_files:
-        clip = AudioSegment.from_file(path)
-        combined += clip
+    with open(audio_path, "rb") as audio_file:
+        encoded_audio = base64.b64encode(audio_file.read()).decode("utf-8")
 
-    # Write merged audio to a temp file
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-        tmp_path = tmp.name
-        combined.export(tmp_path, format="wav")
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json",
+    }
 
-    try:
-        model = whisper.load_model(model_size)
-        result = model.transcribe(tmp_path)
-        return result["text"].strip()
-    finally:
-        os.unlink(tmp_path)  # Clean up temp file
+    payload = {
+        "model": MODEL_NAME,
+        "temperature": 0.0,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are a transcriber. Output ONLY the raw text verbatim. "
+                    "Standardize colloquialisms unless the speech is extremely informal."
+                ),
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Transcribe audio verbatim. Output raw text only."},
+                    {
+                        "type": "input_audio",
+                        "input_audio": {
+                            "data": encoded_audio,
+                            "format": "wav",
+                        },
+                    },
+                ],
+            },
+        ],
+    }
+
+    response = requests.post(url, headers=headers, json=payload, timeout=120)
+    if response.status_code != 200:
+        raise HTTPException(status_code=response.status_code, detail=f"Upstream API Error: {response.text}")
+
+    result = response.json()
+    transcript = result["choices"][0]["message"]["content"]
+    return transcript.strip()
 
 
-def record_and_transcribe(model_size: str = "base") -> str:
+# -----------------------------
+# Spike-session recording logic
+# -----------------------------
+def record_spike_sequence(spike_threshold: float = SPIKE_THRESHOLD) -> list[str]:
     """
-    Records audio chunks, detects speech via spike detection,
-    and returns a single transcribed string of all speech detected.
-
-    Args:
-        model_size: Whisper model size — "tiny", "base", "small", "medium", "large"
+    Record chunks until:
+      1) a chunk crosses the spike threshold, then
+      2) we keep saving loud chunks, and
+      3) stop after the first quiet chunk after speech has started.
 
     Returns:
-        Transcribed string of all recorded speech, ready to pass to an AI.
+        List of saved WAV chunk paths.
     """
-    print(f"[*] Listening… (spike threshold RMS = {SPIKE_THRESHOLD})")
-    print(f"[*] Recordings will be saved to '{OUTPUT_DIR}/'")
-    print("[*] Press Ctrl+C to stop manually.\n")
+    print(f"[*] Listening... (RMS threshold = {spike_threshold})")
+    print(f"[*] Saving chunks to '{OUTPUT_DIR}/'")
 
-    in_spike_sequence = False
-    saved_files = []
+    saved_files: list[str] = []
+    started = False
     chunk_index = 0
 
-    try:
-        while True:
-            audio = record_chunk()
-            level = audio_spike(audio)
-            print(f"    Chunk #{chunk_index:04d}  RMS = {level:7.1f}", end="")
+    while True:
+        audio = record_chunk()
+        level = audio_spike(audio)
 
-            if level >= SPIKE_THRESHOLD:
-                filename = save_chunk(audio, chunk_index)
-                saved_files.append(filename)
-                in_spike_sequence = True
-                print(f"  ← SPIKE! Saved → {filename}")
-            else:
-                print("  (quiet, discarded)")
-                if in_spike_sequence:
-                    print(f"\n[✓] Spike sequence ended. {len(saved_files)} chunk(s) saved.")
-                    break
+        print(f"    Chunk #{chunk_index:04d}  RMS = {level:8.1f}", end="")
 
-            chunk_index += 1
+        if level >= spike_threshold:
+            started = True
+            filename = save_chunk(audio, chunk_index)
+            saved_files.append(filename)
+            print(f"  ← SPIKE! Saved → {filename}")
+        else:
+            print("  (quiet, discarded)")
+            if started:
+                print(f"\n[✓] Spike sequence ended. {len(saved_files)} chunk(s) saved.")
+                break
 
-    except KeyboardInterrupt:
-        print("\n[!] Interrupted by user.")
+        chunk_index += 1
+
+    return saved_files
+
+
+def record_and_transcribe() -> str:
+    """
+    Record a spike-triggered sequence, merge the saved chunks,
+    transcribe them once, and return the transcript.
+    """
+    saved_files = record_spike_sequence()
 
     if not saved_files:
         print("[!] No speech detected.")
         return ""
 
-    print(f"[*] Transcribing {len(saved_files)} chunk(s)...")
-    transcript = transcribe_by_merging(saved_files, model_size=model_size)
-    print(f"[✓] Transcript: {transcript}\n")
+    tmp_dir = Path(tempfile.mkdtemp())
+    try:
+        merged_path = str(tmp_dir / "merged.wav")
+        merge_wav_files(saved_files, merged_path)
 
+        print(f"[*] Transcribing merged audio from {len(saved_files)} chunk(s)...")
+        transcript = transcribe_wav_file(merged_path)
+
+        print(f"[✓] Transcript: {transcript}\n")
+        return transcript
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+"""
+# -----------------------------
+# FastAPI route, if you still want it
+# -----------------------------
+@app.post("/transcribe")
+async def transcribe_audio(file: UploadFile = File(...)):
+    tmp_dir = None
+    try:
+        tmp_dir = Path(tempfile.mkdtemp())
+        original_path = tmp_dir / f"{file.filename}"
+        with original_path.open("wb") as f:
+            f.write(await file.read())
+
+        transcript = transcribe_wav_file(str(original_path))
+        return {"status": "success", "transcript": transcript}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
+    finally:
+        if tmp_dir:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+"""
+# -----------------------------
+# Main entry point
+# -----------------------------
+def main():
+    transcript = record_and_transcribe()
+    print(transcript)
     return transcript
+
+
+if __name__ == "__main__":
+    main()
