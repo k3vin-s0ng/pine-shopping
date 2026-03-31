@@ -9,7 +9,8 @@ import wave
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
-
+from pydub import AudioSegment
+from fastapi.middleware.cors import CORSMiddleware
 import numpy as np
 import requests
 import sounddevice as sd
@@ -17,6 +18,13 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 
 app = FastAPI()
 load_dotenv()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # or ["*"] for dev
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # -----------------------------
 # Config
@@ -27,9 +35,13 @@ RECORDING_DURATION = 3  # seconds per chunk
 SPIKE_THRESHOLD = 500  # adjust for your mic
 OUTPUT_DIR = "recordings"
 
-API_KEY = os.getenv("OPENROUTER_API_KEY", default=None)
+API_KEY = os.getenv("OPENROUTER_API_KEY")
 MODEL_NAME = "google/gemini-2.0-flash-lite-001"
 
+SESSION_DIR = Path(tempfile.mkdtemp(prefix="voice_session_"))
+CHUNK_DIR = SESSION_DIR / "chunks"
+CHUNK_DIR.mkdir(parents=True, exist_ok=True)
+chunk_counter = 0
 
 # -----------------------------
 # Audio helpers
@@ -42,6 +54,17 @@ def audio_spike(data: np.ndarray) -> float:
     x = data.astype(np.float64)
     return float(np.sqrt(np.mean(x * x)))
 
+def get_audio_format(filename: str) -> str:
+    ext = Path(filename).suffix.lower().replace(".", "")
+
+    if ext in ["wav", "wave"]:
+        return "wav"
+    elif ext in ["mp3"]:
+        return "mp3"
+    elif ext in ["webm", "ogg"]:
+        return "webm"  # or "ogg" depending on API expectations
+
+    return "mp3"  # safe fallback
 
 def record_chunk() -> np.ndarray:
     """
@@ -118,6 +141,7 @@ def merge_wav_files(audio_files: list[str], merged_path: str) -> str:
 # -----------------------------
 # Transcription
 # -----------------------------
+
 def transcribe_wav_file(audio_path: str) -> str:
     """
     Send a WAV file to OpenRouter for transcription.
@@ -169,6 +193,52 @@ def transcribe_wav_file(audio_path: str) -> str:
     result = response.json()
     transcript = result["choices"][0]["message"]["content"]
     return transcript.strip()
+
+def transcribe_file(audio_path: str, audio_format: str) -> str:
+    if not API_KEY:
+        raise RuntimeError("OPENROUTER_API_KEY is not set.")
+
+    with open(audio_path, "rb") as audio_file:
+        encoded_audio = base64.b64encode(audio_file.read()).decode("utf-8")
+
+    payload = {
+        "model": MODEL_NAME,
+        "temperature": 0.0,
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a transcriber. Output ONLY raw text."
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Transcribe audio."},
+                    {
+                        "type": "input_audio",
+                        "input_audio": {
+                            "data": encoded_audio,
+                            "format": audio_format
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+
+    response = requests.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {API_KEY}",
+            "Content-Type": "application/json"
+        },
+        json=payload,
+        timeout=120
+    )
+
+    if response.status_code != 200:
+        raise HTTPException(status_code=response.status_code, detail=response.text)
+
+    return response.json()["choices"][0]["message"]["content"].strip()
 
 
 # -----------------------------
@@ -237,7 +307,6 @@ def record_and_transcribe() -> str:
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
-"""
 # -----------------------------
 # FastAPI route, if you still want it
 # -----------------------------
@@ -249,8 +318,9 @@ async def transcribe_audio(file: UploadFile = File(...)):
         original_path = tmp_dir / f"{file.filename}"
         with original_path.open("wb") as f:
             f.write(await file.read())
-
-        transcript = transcribe_wav_file(str(original_path))
+        
+        audio_format = get_audio_format(file.filename)
+        transcript = transcribe_file(str(original_path), audio_format)
         return {"status": "success", "transcript": transcript}
 
     except HTTPException:
@@ -261,15 +331,75 @@ async def transcribe_audio(file: UploadFile = File(...)):
         if tmp_dir:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
-"""
-# -----------------------------
-# Main entry point
-# -----------------------------
-def main():
+@app.post("/record-and-transcribe")
+def record_and_transcribe_route():
     transcript = record_and_transcribe()
-    print(transcript)
-    return transcript
+    return {"transcript": transcript}
+
+@app.post("/upload-chunk")
+async def upload_chunk(file: UploadFile = File(...)):
+    global chunk_counter
+
+    try:
+        suffix = Path(file.filename).suffix or ".webm"
+        chunk_name = f"chunk_{chunk_counter:05d}{suffix}"
+        chunk_path = CHUNK_DIR / chunk_name
+
+        with open(chunk_path, "wb") as buffer:
+            buffer.write(await file.read())
+
+        chunk_counter += 1
+        return {"status": "ok", "filename": chunk_name}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save chunk: {str(e)}")
+
+def stitch_audio_chunks(chunk_paths: list[Path], output_path: Path) -> Path:
+    if not chunk_paths:
+        raise ValueError("No chunks to stitch.")
+
+    combined = AudioSegment.empty()
+
+    for path in chunk_paths:
+        clip = AudioSegment.from_file(path)
+        combined += clip
+
+    combined.export(output_path, format="wav")
+    return output_path
 
 
-if __name__ == "__main__":
-    main()
+import traceback
+from fastapi import HTTPException
+
+@app.post("/finalize")
+async def finalize():
+    global chunk_counter
+
+    final_wav = SESSION_DIR / "merged.wav"
+
+    try:
+        chunk_paths = sorted(CHUNK_DIR.glob("chunk_*"))
+        if not chunk_paths:
+            return {"status": "success", "transcript": "", "message": "No audio chunks found."}
+
+        stitch_audio_chunks(chunk_paths, final_wav)
+        transcript = transcribe_wav_file(str(final_wav))
+
+        return {
+            "status": "success",
+            "transcript": transcript,
+            "chunks_processed": len(chunk_paths),
+        }
+
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Finalize failed: {str(e)}")
+
+    finally:
+        try:
+            shutil.rmtree(CHUNK_DIR, ignore_errors=True)
+            if final_wav.exists():
+                final_wav.unlink()
+            CHUNK_DIR.mkdir(parents=True, exist_ok=True)
+            chunk_counter = 0
+        except Exception:
+            traceback.print_exc()
