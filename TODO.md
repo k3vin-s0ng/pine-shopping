@@ -1,6 +1,6 @@
 # Pine — Active Task Board
 
-_Updated: 2026-03-29 (D3 + D4 implemented) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
+_Updated: 2026-03-31 (Kevin voice + UI session) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
 
 ---
 
@@ -19,6 +19,8 @@ _Updated: 2026-03-29 (D3 + D4 implemented) | Owner tags: [D] = Daniel, [K] = Kev
 | # | Task | Owner | Notes |
 |---|---|---|---|
 | I-02 | Competitive research (Google Shopping AI, Perplexity Shopping, etc.) | [D]/[E] | Needed before PRD |
+| E1 | Voice input via MediaRecorder + Python transcription backend | [K] | VAD (RMS-based silence detection), MediaRecorder chunking, sends audio blob to Python FastAPI `/transcribe` via ngrok. Transcript feeds `useConvo.ts` → `searchProducts` → TTS reply. **Note:** uses Python backend instead of Web Speech API — different approach than originally planned. Back-and-forth display loop (products visible on landing) still needed. |
+| E2 | Orb UI state machine | [K] | 3 of 4 states implemented: `idle`, `listening`, `processing`. CSS classes wired. `responding` state (while TTS plays) still missing. |
 
 ---
 
@@ -31,8 +33,8 @@ _Updated: 2026-03-29 (D3 + D4 implemented) | Owner tags: [D] = Daniel, [K] = Kev
 | K1 | Data Agent: structured query intake contract | [K] | Accept typed query object from Reasoning Agent. Schema in CLAUDE.md. Agree with Daniel before building. |
 | K8 | Direct retailer URL resolution | [K] | **Blocks affiliate monetization.** Kevin to choose and implement one of: (1) SerpAPI Product Results endpoint — takes Google Shopping product ID, returns merchant seller links with direct retailer URLs; extra call per product but keeps SerpAPI as fallback. (2) Amazon Product Advertising API — returns direct Amazon URLs natively, designed for Associates program. (3) Direct scraping — Kevin's Data Agent scrapes retailer pages directly, URL is the page URL. All three valid; Kevin decides based on reliability and rate limits. Enriched result object `url` field MUST be a direct retailer URL — never a google.com/shopping URL. |
 | K2 | Retailer scraping layer | [K] | Adapt existing scraping agent. Start with Amazon + Target + 1 category retailer. Narrow and reliable beats broad and flaky. |
-| E1 | Voice input via Web Speech API | [E] | Orb tap → listening → transcript feeds D1 pipeline. `orb.jsx` exists but has no Speech API. Chrome desktop reliable for demo. |
-| E2 | Orb UI state machine | [E] | 4 states: idle / listening / processing / responding. `orb.jsx` currently has idle/listening only. Add processing + responding states. |
+| E1 | Voice input | [K]/[E] | → Moved to 🟡 In Progress. See notes there. |
+| E2 | Orb UI state machine | [K]/[E] | → Moved to 🟡 In Progress. `responding` state still needed. |
 
 ### Week 2 — Reasoning + Integration
 
@@ -146,6 +148,14 @@ _Updated: 2026-03-29 (D3 + D4 implemented) | Owner tags: [D] = Daniel, [K] = Kev
 | ✓ | D3: ACCUMULATION RULE added to prompt — model instructed to carry all prior constraints forward in each turn's output. Refinement-turn confidence floor (≥0.7 when category + ≥1 constraint established) added. B-06 and B-07 resolved. | 2026-03-30 |
 | ✓ | D4: `user_expertise` field added to `IntentExtractionResult` — "novice" / "intermediate" / "expert" derived from vocabulary. USER EXPERTISE CLASSIFICATION section added to prompt with per-level clarification question style rules. | 2026-03-30 |
 | ✓ | API route now returns `intent` object on all response paths (clarification, search, SerpAPI error) — consumed by client-side accumulator. Accepts `accumulatedIntent` from frontend for D5 utility scoring (logged for now). | 2026-03-30 |
+| ✓ | Landing page UI updated to match Eric's HTML — `hero.jsx`, `inputbar.jsx`, `curated.jsx`, `globals.css` restyled | 2026-03-30 |
+| ✓ | Logo updated — `public/logo.png` + `favicon.ico` replaced; old logo archived as `public/old_logo.png` | 2026-03-30 |
+| ✓ | `useConvo.ts` hook created — manages voice conversation history, calls `searchProducts`, speaks `chatResponse` via Web Speech Synthesis (preferred voice: Samantha/Google US English/Zira, rate 1.05). Exports `processTranscript`, `isSpeaking`, `isThinking`, `stopSpeaking`, `reset`. | 2026-03-31 |
+| ✓ | E3: Voice output via Web Speech Synthesis — implemented in `useConvo.ts`. Pine speaks the `chatResponse` reply after each turn. `isSpeaking` state tracks active utterance. | 2026-03-31 |
+| ✓ | Python transcription backend expanded (`app/backend/conversation/main.py`) — added `/upload-chunk`, `/finalize` routes and `stitch_audio_chunks()` using pydub. Service now supports both single-file `/transcribe` and chunked upload+stitch flow. Exposed via ngrok for orb to call. | 2026-03-31 |
+| ✓ | `orb.jsx` fully wired for voice — MediaRecorder + Web Audio API VAD (RMS level monitoring, 100ms poll). Speech threshold 0.03, silence threshold 0.015, silence timeout 1200ms auto-stops recording. Audio blob POSTed to Python `/transcribe` endpoint. `listening` + `processing` CSS states active. | 2026-03-31 |
+| ✓ | Intent pivot bug fixed — `is_pivot` field added to `IntentExtractionResult` schema and prompt. On pivot, `page.jsx` resets `accumulatedIntent` and history to only the current turn; no prior category attributes leak into the new query. | 2026-03-31 |
+| ✓ | Price filter fallback added to `route.ts` — when budget/attribute filters remove all results, returns unfiltered products with explanatory message instead of empty grid. Empty SerpAPI response now returns a user-facing message instead of blank state. | 2026-03-31 |
 
 ---
 

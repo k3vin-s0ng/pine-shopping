@@ -24,6 +24,8 @@ export interface IntentExtractionResult {
   chat_response?: string;
   // D4: vocabulary-derived expertise level — drives clarification question style
   user_expertise: "novice" | "intermediate" | "expert";
+  // True when user switches to an incompatible product category — triggers accumulation reset
+  is_pivot: boolean;
 }
 
 export interface HistoryMessage {
@@ -59,6 +61,7 @@ export async function extractIntent(
     clarification_needed: false,
     chat_response: "Searching for the best matches — one moment.",
     user_expertise: "intermediate",
+    is_pivot: false,
   };
 
   if (!process.env.OPENROUTER_API_KEY) {
@@ -112,6 +115,7 @@ export async function extractIntent(
       clarification_question: parsed.clarification_question || undefined,
       chat_response: parsed.chat_response || undefined,
       user_expertise: parsed.user_expertise ?? "intermediate",
+      is_pivot: parsed.is_pivot === true,
     };
   } catch (err) {
     console.error("[intentExtraction] Failed (parse error or API error), using fallback:", err);
@@ -161,5 +165,6 @@ export function mergeIntent(
     clarification_question: latest.clarification_question,
     chat_response: latest.chat_response,
     search_query: latest.search_query,
+    is_pivot: latest.is_pivot,
   };
 }

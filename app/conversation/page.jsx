@@ -48,36 +48,45 @@ function ConversationView() {
 
       const data = await res.json();
 
-      if (data.chatResponse) {
-        setHistory((prev) => [...prev, { role: "ai", content: data.chatResponse }]);
-      }
-
-      // D3: merge new intent into accumulated state so constraints carry forward across turns
-      // Mirrors mergeIntent() in intentExtraction.ts — keep in sync if merge strategy changes
-      if (data.intent) {
-        setAccumulatedIntent((prev) => ({
-          ...data.intent,
-          hard_constraints: {
-            ...prev.hard_constraints,
-            ...data.intent.hard_constraints,
-            must_have_attributes: [
-              ...new Set([
-                ...(prev.hard_constraints?.must_have_attributes ?? []),
-                ...(data.intent.hard_constraints?.must_have_attributes ?? []),
-              ]),
-            ],
-          },
-          soft_preferences: {
-            ...prev.soft_preferences,
-            ...data.intent.soft_preferences,
-            vibe_keywords: [
-              ...new Set([
-                ...(prev.soft_preferences?.vibe_keywords ?? []),
-                ...(data.intent.soft_preferences?.vibe_keywords ?? []),
-              ]),
-            ],
-          },
-        }));
+      if (data.intent?.is_pivot) {
+        // Pivot: user changed category — reset history to only current turn so old context
+        // doesn't corrupt future turns' accumulation
+        console.log("[AccumulatedIntent] Pivot detected — resetting accumulated intent");
+        const pivotHistory = [{ role: "user", content: text }];
+        if (data.chatResponse) pivotHistory.push({ role: "ai", content: data.chatResponse });
+        setHistory(pivotHistory);
+        setAccumulatedIntent(data.intent);
+      } else {
+        if (data.chatResponse) {
+          setHistory((prev) => [...prev, { role: "ai", content: data.chatResponse }]);
+        }
+        // D3: merge new intent into accumulated state so constraints carry forward across turns
+        // Mirrors mergeIntent() in intentExtraction.ts — keep in sync if merge strategy changes
+        if (data.intent) {
+          setAccumulatedIntent((prev) => ({
+            ...data.intent,
+            hard_constraints: {
+              ...prev.hard_constraints,
+              ...data.intent.hard_constraints,
+              must_have_attributes: [
+                ...new Set([
+                  ...(prev.hard_constraints?.must_have_attributes ?? []),
+                  ...(data.intent.hard_constraints?.must_have_attributes ?? []),
+                ]),
+              ],
+            },
+            soft_preferences: {
+              ...prev.soft_preferences,
+              ...data.intent.soft_preferences,
+              vibe_keywords: [
+                ...new Set([
+                  ...(prev.soft_preferences?.vibe_keywords ?? []),
+                  ...(data.intent.soft_preferences?.vibe_keywords ?? []),
+                ]),
+              ],
+            },
+          }));
+        }
       }
 
       setProducts(data.products || []);

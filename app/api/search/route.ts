@@ -79,10 +79,19 @@ export async function POST(request: NextRequest) {
   let rawItems: any[];
   try {
     rawItems = await callSerpAPI(searchQuery);
+    if (rawItems.length === 0) {
+      console.warn("[POST /api/search] SerpAPI returned 0 results for query:", searchQuery);
+      return NextResponse.json({
+        products: [],
+        chatResponse: `I couldn't find results for that — could you describe what you're looking for differently?`,
+        clarificationNeeded: false,
+        intent,
+      });
+    }
   } catch (err) {
     console.error("[POST /api/search] SerpAPI failed:", err);
     return NextResponse.json(
-      { error: "Search service unavailable", products: [], chatResponse: intent.chat_response || "", intent },
+      { error: "Search service unavailable", products: [], chatResponse: "I'm having trouble searching right now — please try again in a moment.", clarificationNeeded: false, intent },
       { status: 502 }
     );
   }
@@ -90,16 +99,29 @@ export async function POST(request: NextRequest) {
   // Step 5: Transform and filter by hard constraint price bounds
   let products = transformProducts(rawItems);
   const { budget_ceiling, budget_floor, must_have_attributes } = intent.hard_constraints;
-  if (budget_ceiling) products = products.filter((p) => p.num > 0 && p.num <= budget_ceiling);
-  if (budget_floor) products = products.filter((p) => p.num >= budget_floor);
+
+  let filteredProducts = [...products];
+  if (budget_ceiling) filteredProducts = filteredProducts.filter((p) => p.num > 0 && p.num <= budget_ceiling);
+  if (budget_floor) filteredProducts = filteredProducts.filter((p) => p.num >= budget_floor);
   if (must_have_attributes && must_have_attributes.length > 0) {
     const attrs = must_have_attributes.map((a) => a.toLowerCase());
-    products = products.filter((p) =>
+    filteredProducts = filteredProducts.filter((p) =>
       attrs.some((attr) => p.name.toLowerCase().includes(attr))
     );
   }
 
-  const chatResponse = intent.chat_response || "Here are the best matches I found for you!";
-  console.log("[POST /api/search] Returning", products.length, "products for:", searchQuery);
-  return NextResponse.json({ products, chatResponse, clarificationNeeded: false, intent });
+  // Fallback: if filtering removed all results, return unfiltered with explanatory message
+  let priceFilterApplied = true;
+  if (filteredProducts.length === 0 && products.length > 0) {
+    console.warn("[POST /api/search] Filters removed all results — returning unfiltered. Query:", searchQuery);
+    filteredProducts = products;
+    priceFilterApplied = false;
+  }
+
+  const chatResponse = !priceFilterApplied
+    ? "I couldn't find exact matches within your constraints, but here are the closest options I found."
+    : (intent.chat_response || "Here are the best matches I found for you!");
+
+  console.log("[POST /api/search] Returning", filteredProducts.length, "products for:", searchQuery);
+  return NextResponse.json({ products: filteredProducts, chatResponse, clarificationNeeded: false, intent });
 }

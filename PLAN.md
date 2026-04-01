@@ -1,6 +1,6 @@
 # Pine — Product Roadmap
 
-_Last updated: 2026-03-30 (D3 + D4 session)_
+_Last updated: 2026-03-31 (Kevin voice + UI session)_
 
 ---
 
@@ -62,9 +62,9 @@ The goal is to upgrade Pine from Level 3.5 (single intent extraction call + Serp
 - [ ] K7: SerpAPI silent fallback when scraping returns zero results or fails
 
 ### Eric — Voice + UI
-- [ ] E1: Voice input via Web Speech API (orb trigger, transcript → intent pipeline) — `orb.jsx` exists as stub, no Speech API yet
-- [ ] E2: Orb UI state machine (idle / listening / processing / responding animations) — `orb.jsx` stub has idle/listening only, no processing/responding
-- [ ] E3: Voice output via Web Speech Synthesis API (Pine speaks clarifications + explanations)
+- [ ] E1: Voice input — MediaRecorder + VAD wired in `orb.jsx`; transcription via Python FastAPI backend (ngrok). Transcript feeds `useConvo.ts`. **Architecture note: Kevin chose MediaRecorder + Python backend over Web Speech API for VAD control.** Back-and-forth display loop (products shown alongside orb) still pending.
+- [ ] E2: Orb UI state machine — idle / listening / processing implemented. `responding` state (during TTS playback) still missing.
+- [x] E3: Voice output via Web Speech Synthesis API — implemented in `useConvo.ts`; Pine speaks `chatResponse` after each turn
 - [x] E4: Result cards with intent-match explanation display (3 cards max, retailer logo link) — `ProductCard.jsx` + `ProductGrid.jsx` live in `/conversation`; D6 explanation slot stubbed with TODO
 - [x] E5: Typing fallback input (visually subordinate, functionally equal to voice) — `inputbar.jsx` navigates to `/conversation`, `BottomBar.jsx` submits follow-ups to API
 
@@ -145,6 +145,11 @@ The long-term product vision is payment completing on Pine with direct retailer 
 | 2026-03-29 | History duplication root cause identified | `newHistory` (containing current message) was sent to API; `extractIntent` then appended the same message again. Fixed by sending `priorHistory` to API. Impact: every prior LLM call had the current user message doubled, degrading multi-turn constraint accumulation. |
 | 2026-03-30 | D3 preference accumulator made explicit via mergeIntent | Previously constraints carried forward by accident via history re-reading — unreliable if LLM missed a detail. Now `accumulatedIntent` state explicitly unions `hard_constraints` and `soft_preferences` across turns. `mergeIntent()` exported from server module as canonical reference; client-side logic in `page.jsx` mirrors it. |
 | 2026-03-30 | D4 expertise classification added | `user_expertise` ("novice" / "intermediate" / "expert") derived from vocabulary, not confidence score. Drives clarification question tone: lifestyle-framed for novice, balanced for intermediate, spec-framed for expert. Never ask vibe questions to expert users. |
+| 2026-03-30 | Landing page UI and logo updated | `hero.jsx`, `inputbar.jsx`, `curated.jsx`, `globals.css` updated to match Eric's HTML. Logo replaced; old logo archived. |
+| 2026-03-31 | Kevin chose MediaRecorder + Python transcription backend over Web Speech Recognition API for voice input | Provides direct control over VAD (RMS-based silence detection), audio chunking, and format handling. Python FastAPI backend (`main.py`) exposed via ngrok serves `/transcribe`, `/upload-chunk`, `/finalize`. Trade-off: requires backend to be running and publicly accessible (ngrok); Web Speech API would be zero-infra. Decision stands for demo; revisit for production. |
+| 2026-03-31 | `useConvo.ts` hook created as voice-side conversation manager | Manages voice history separately from the text conversation page. Calls `searchProducts` directly and speaks reply via TTS. Currently parallel to `/conversation` page — the two paths are not unified yet. Unification is a pending architecture decision. |
+| 2026-03-31 | Intent pivot detection added to schema and prompt | `is_pivot: boolean` added to `IntentExtractionResult`. On pivot, both `accumulatedIntent` and conversation history reset to only the current turn. Prevents prior category attributes from contaminating unrelated searches. Pivot examples embedded in prompt so model can learn the pattern. |
+| 2026-03-31 | Price filter fallback added to route | When budget/attribute filters eliminate all results, `route.ts` returns unfiltered products with an explanatory message rather than an empty grid. Zero-result SerpAPI responses now surface a user-visible message instead of a blank state. |
 
 ---
 
