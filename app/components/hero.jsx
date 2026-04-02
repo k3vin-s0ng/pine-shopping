@@ -66,7 +66,7 @@ export default function Hero() {
 
       {/* CTA text below orb */}
       <div className="orb-cta">
-        <h2>Just start talking to Pine.</h2>
+        <h2><em>Just start talking to Pine</em></h2>
         <p>&ldquo;Find me a linen shirt for a weekend escape...&rdquo;</p>
       </div>
 
