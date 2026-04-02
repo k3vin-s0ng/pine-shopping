@@ -23,6 +23,7 @@ export default function Orb() {
   const chunksRef = useRef([]);
   const speakingRef = useRef(false);
   const stoppedRef = useRef(false);
+  const hasProcessedRef = useRef(false);
   const mimeTypeRef = useRef("audio/webm");
 
   const getRmsLevel = (analyser) => {
@@ -39,7 +40,7 @@ export default function Orb() {
     return Math.sqrt(sum / bufferLength);
   };
 
-  const cleanup = () => {
+  const cleanupRecording = () => {
     if (monitorIntervalRef.current) {
       window.clearInterval(monitorIntervalRef.current);
       monitorIntervalRef.current = null;
@@ -65,46 +66,13 @@ export default function Orb() {
     mediaRecorderRef.current = null;
     speakingRef.current = false;
     stoppedRef.current = false;
-  };
-
-  const sendFinalAudio = async () => {
-    if (chunksRef.current.length === 0) {
-      console.warn("No audio chunks captured.");
-      return;
-    }
-
-    const finalBlob = new Blob(chunksRef.current, {
-      type: mimeTypeRef.current,
-    });
-
-    const form = new FormData();
-    const extension = mimeTypeRef.current.includes("webm") ? "webm" : "ogg";
-    form.append("file", finalBlob, `recording.${extension}`);
-
-    const res = await fetch("https://nonvertebral-winter-pronunciative.ngrok-free.dev/transcribe", {
-      method: "POST",
-      body: form,
-    });
-
-    const text = await res.text();
-    console.log("Transcribe raw response:", text);
-
-    if (!res.ok) {
-      throw new Error(`Transcribe failed (${res.status}): ${text}`);
-    }
-
-    const data = JSON.parse(text);
-    if (data.transcript) {
-      await processTranscript(data.transcript);
-    }
-
-    // Hook this into your chatbot here
-    // sendTranscriptToChatbot(data.transcript);
+    hasProcessedRef.current = false;
   };
 
   const startRecording = async () => {
     stoppedRef.current = false;
     speakingRef.current = false;
+    hasProcessedRef.current = false;
     chunksRef.current = [];
 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -138,8 +106,8 @@ export default function Orb() {
     };
 
     recorder.onstop = async () => {
-      if (stoppedRef.current) return;
-      stoppedRef.current = true;
+      if (hasProcessedRef.current) return;
+      hasProcessedRef.current = true;
 
       setProcessing(true);
       try {
@@ -148,7 +116,7 @@ export default function Orb() {
         console.error("Transcription error:", err);
       } finally {
         setProcessing(false);
-        cleanup();
+        cleanupRecording();
         setListening(false);
       }
     };
@@ -182,6 +150,49 @@ export default function Orb() {
     }, 100);
   };
 
+  const sendFinalAudio = async () => {
+    if (chunksRef.current.length === 0) {
+      console.warn("No audio chunks captured.");
+      return;
+    }
+
+    const finalBlob = new Blob(chunksRef.current, {
+      type: mimeTypeRef.current,
+    });
+
+    const form = new FormData();
+    const extension = mimeTypeRef.current.includes("webm") ? "webm" : "ogg";
+    form.append("file", finalBlob, `recording.${extension}`);
+
+    const res = await fetch("https://nonvertebral-winter-pronunciative.ngrok-free.dev/transcribe", {
+      method: "POST",
+      body: form,
+    });
+
+    const text = await res.text();
+
+    if (!res.ok) {
+      throw new Error(`Transcribe failed (${res.status}): ${text}`);
+    }
+
+    const data = JSON.parse(text);
+
+    if (data.transcript) {
+      await processTranscript(data.transcript, {
+        onAssistantFinished: ({ resultCount }) => {
+          if (resultCount === 0) {
+            setListening(true);
+            startRecording().catch((err) => {
+              console.error("Could not restart recording:", err);
+              cleanupRecording();
+              setListening(false);
+            });
+          }
+        },
+      });
+    }
+  };
+
   const stopRecording = async () => {
     if (stoppedRef.current) return;
     stoppedRef.current = true;
@@ -189,7 +200,7 @@ export default function Orb() {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
     } else {
-      cleanup();
+      cleanupRecording();
       setListening(false);
     }
   };
@@ -203,7 +214,7 @@ export default function Orb() {
         await startRecording();
       } catch (err) {
         console.error("Could not start recording:", err);
-        cleanup();
+        cleanupRecording();
         setListening(false);
       }
     } else {

@@ -1,15 +1,24 @@
 "use client";
 
 import { useRef, useState, useCallback } from "react";
-import { searchProducts } from "./serpapi";
+import { searchProducts, ConversationTurn } from "./serpapi";
 
 interface HistoryMessage {
   role: "user" | "ai";
   content: string;
 }
 
+type AssistantFinishedMeta = {
+  resultCount: number;
+};
+
 export interface UseConvoReturn {
-  processTranscript: (transcript: string) => Promise<void>;
+  processTranscript: (
+    transcript: string,
+    options?: {
+      onAssistantFinished?: (meta: AssistantFinishedMeta) => void;
+    }
+  ) => Promise<void>;
   isSpeaking: boolean;
   isThinking: boolean;
   stopSpeaking: () => void;
@@ -22,7 +31,7 @@ export function useConvo(): UseConvoReturn {
   const historyRef = useRef<HistoryMessage[]>([]);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
-  const speak = useCallback((text: string): void => {
+  const speak = useCallback((text: string, onEnd?: () => void): void => {
     if (!text) return;
 
     window.speechSynthesis.cancel();
@@ -35,13 +44,20 @@ export function useConvo(): UseConvoReturn {
 
     const voices = window.speechSynthesis.getVoices();
     const preferred =
-      voices.find((v) => v.lang === "en-US" && /samantha|google us english|zira/i.test(v.name)) ??
+      voices.find(
+        (v) =>
+          v.lang === "en-US" &&
+          /samantha|google us english|zira/i.test(v.name)
+      ) ??
       voices.find((v) => v.lang.startsWith("en"));
 
     if (preferred) utterance.voice = preferred;
 
     utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
+    utterance.onend = () => {
+      setIsSpeaking(false);
+      onEnd?.();
+    };
     utterance.onerror = () => setIsSpeaking(false);
 
     window.speechSynthesis.speak(utterance);
@@ -52,33 +68,49 @@ export function useConvo(): UseConvoReturn {
     setIsSpeaking(false);
   }, []);
 
-  const processTranscript = useCallback(async (transcript: string): Promise<void> => {
-    if (!transcript?.trim()) return;
-
-    historyRef.current = [
-      ...historyRef.current,
-      { role: "user", content: transcript },
-    ];
-
-    setIsThinking(true);
-
-    try {
-      const { chatResponse } = await searchProducts(transcript, historyRef.current);
-      const reply = chatResponse ?? "Sorry, I didn't catch that.";
+  const processTranscript = useCallback(
+    async (
+      transcript: string,
+      options?: {
+        onAssistantFinished?: (meta: AssistantFinishedMeta) => void;
+      }
+    ): Promise<void> => {
+      if (!transcript?.trim()) return;
 
       historyRef.current = [
         ...historyRef.current,
-        { role: "ai", content: reply },
+        { role: "user", content: transcript },
       ];
 
-      speak(reply);
-    } catch (err) {
-      console.error("useConvo error:", err);
-      speak("Sorry, something went wrong. Please try again.");
-    } finally {
-      setIsThinking(false);
-    }
-  }, [speak]);
+      setIsThinking(true);
+
+      try {
+        const { chatResponse, resultCount } = await searchProducts(
+          transcript,
+          historyRef.current as ConversationTurn[]
+        );
+
+        const reply = chatResponse || "Sorry, I didn't catch that.";
+
+        historyRef.current = [
+          ...historyRef.current,
+          { role: "ai", content: reply },
+        ];
+
+        speak(reply, () => {
+          options?.onAssistantFinished?.({ resultCount });
+        });
+      } catch (err) {
+        console.error("useConvo error:", err);
+        speak("Sorry, something went wrong. Please try again.", () => {
+          options?.onAssistantFinished?.({ resultCount: 0 });
+        });
+      } finally {
+        setIsThinking(false);
+      }
+    },
+    [speak]
+  );
 
   const reset = useCallback((): void => {
     stopSpeaking();
