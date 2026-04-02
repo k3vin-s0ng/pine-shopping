@@ -2,13 +2,12 @@
 
 import { useRef, useState } from "react";
 import { useConvo } from "../lib/useConvo";
-import { Product } from "../lib/products";
 
 
 const CHUNK_MS = 3000;
-const SPEECH_THRESHOLD = 0.03;
-const SILENCE_THRESHOLD = 0.015;
-const SILENCE_DURATION_MS = 1200;
+const SPEECH_THRESHOLD = 0.025;
+const SILENCE_THRESHOLD = 0.025;
+const SILENCE_DURATION_MS = 500;
 
 export default function Orb({ onComplete }) {
   const { processTranscript } = useConvo();
@@ -114,6 +113,7 @@ export default function Orb({ onComplete }) {
       hasProcessedRef.current = true;
 
       setProcessing(true);
+      setListening(false);
       try {
         await sendFinalAudio();
       } catch (err) {
@@ -121,7 +121,6 @@ export default function Orb({ onComplete }) {
       } finally {
         setProcessing(false);
         cleanupRecording();
-        setListening(false);
       }
     };
 
