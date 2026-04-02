@@ -2,16 +2,20 @@
 
 import { useRef, useState } from "react";
 import { useConvo } from "../lib/useConvo";
+import { Product } from "../lib/products";
+
 
 const CHUNK_MS = 3000;
 const SPEECH_THRESHOLD = 0.03;
 const SILENCE_THRESHOLD = 0.015;
 const SILENCE_DURATION_MS = 1200;
 
-export default function Orb() {
+export default function Orb({ onComplete }) {
   const { processTranscript } = useConvo();
   const [listening, setListening] = useState(false);
   const [processing, setProcessing] = useState(false);
+  
+  const[conversation, setConversation] = useState(false);
 
   const mediaRecorderRef = useRef(null);
   const streamRef = useRef(null);
@@ -179,7 +183,7 @@ export default function Orb() {
 
     if (data.transcript) {
       await processTranscript(data.transcript, {
-        onAssistantFinished: ({ resultCount }) => {
+        onAssistantFinished: ({ products, resultCount }) => {
           if (resultCount === 0) {
             setListening(true);
             startRecording().catch((err) => {
@@ -187,6 +191,9 @@ export default function Orb() {
               cleanupRecording();
               setListening(false);
             });
+          }else{
+            setConversation(true);
+            onComplete?.({ products, resultCount });
           }
         },
       });

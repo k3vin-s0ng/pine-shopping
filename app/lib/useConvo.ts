@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback } from "react";
 import { searchProducts, ConversationTurn } from "./serpapi";
+import { Product } from "./products";
 
 interface HistoryMessage {
   role: "user" | "ai";
@@ -10,6 +11,7 @@ interface HistoryMessage {
 
 type AssistantFinishedMeta = {
   resultCount: number;
+  products: Product[];
 };
 
 export interface UseConvoReturn {
@@ -85,7 +87,7 @@ export function useConvo(): UseConvoReturn {
       setIsThinking(true);
 
       try {
-        const { chatResponse, resultCount } = await searchProducts(
+        const { chatResponse, resultCount, products } = await searchProducts(
           transcript,
           historyRef.current as ConversationTurn[]
         );
@@ -98,12 +100,12 @@ export function useConvo(): UseConvoReturn {
         ];
 
         speak(reply, () => {
-          options?.onAssistantFinished?.({ resultCount });
+          options?.onAssistantFinished?.({ resultCount, products });
         });
       } catch (err) {
         console.error("useConvo error:", err);
         speak("Sorry, something went wrong. Please try again.", () => {
-          options?.onAssistantFinished?.({ resultCount: 0 });
+          options?.onAssistantFinished?.({ resultCount: 0, products: [] });
         });
       } finally {
         setIsThinking(false);

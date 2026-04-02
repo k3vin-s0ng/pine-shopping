@@ -131,13 +131,26 @@ function ConversationView() {
 
   // Fire initial search on mount using the URL query param
   useEffect(() => {
+    const saved = localStorage.getItem("orbData");
+
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setProducts(parsed.products || []);
+        setLoading(false);
+        setStatus("Pine is listening");
+        return;
+      } catch (err) {
+        console.error("Could not parse orbData:", err);
+      }
+    }
+
     if (initialQuery) {
       handleSubmit(initialQuery);
     } else {
       setLoading(false);
       setStatus("Pine is listening");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

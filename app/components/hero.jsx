@@ -2,7 +2,7 @@
 import { useRouter } from "next/navigation";
 import Orb from "./orb";
 
-export default function Hero() {
+export default function Hero({onComplete}) {
   const router = useRouter();
 
   function sendChip(text) {
@@ -38,7 +38,7 @@ export default function Hero() {
         </div>
  
         {/* Center orb */}
-        <Orb />
+        <Orb onComplete={onComplete} />
 
         {/* Right category column */}
         <div className="cat-col" style={{ opacity: 0, animation: "fadeUp 0.7s ease forwards 0.65s" }}>
