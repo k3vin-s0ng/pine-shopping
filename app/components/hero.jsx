@@ -1,11 +1,13 @@
+"use client";
+import { useRouter } from "next/navigation";
 import Orb from "./orb";
 
-function sendChip(text) {
-  const input = document.getElementById("mainInput");
-  if (input) { input.value = text; input.focus(); }
-}
-
 export default function Hero() {
+  const router = useRouter();
+
+  function sendChip(text) {
+    router.push(`/conversation?q=${encodeURIComponent(text)}`);
+  }
   return (
     <section className="hero">
       <div className="hero-bloom"></div>
