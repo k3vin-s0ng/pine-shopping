@@ -36,7 +36,7 @@ export default function Hero() {
             <span className="cat-label">Wellness</span>
           </div>
         </div>
-
+ 
         {/* Center orb */}
         <Orb />
 
