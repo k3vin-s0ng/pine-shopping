@@ -164,7 +164,7 @@ export default function Orb() {
     const extension = mimeTypeRef.current.includes("webm") ? "webm" : "ogg";
     form.append("file", finalBlob, `recording.${extension}`);
 
-    const res = await fetch("http://localhost:8000/transcribe", {
+    const res = await fetch("https://nonvertebral-winter-pronunciative.ngrok-free.dev/transcribe", {
       method: "POST",
       body: form,
     });
