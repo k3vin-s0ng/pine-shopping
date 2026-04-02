@@ -3,6 +3,7 @@ import { Product } from "./products";
 export interface SearchResult {
   products: Product[];
   chatResponse: string;
+  resultCount: number;
 }
 
 export interface ConversationTurn {
@@ -20,11 +21,16 @@ export async function searchProducts(
     body: JSON.stringify({ query, history }),
   });
 
-  if (!res.ok) throw new Error("Search failed");
+  if (!res.ok) {
+    throw new Error("Search failed");
+  }
 
   const data = await res.json();
+  const products: Product[] = data.products || [];
+
   return {
-    products: data.products || [],
+    products,
     chatResponse: data.chatResponse || "",
+    resultCount: products.length,
   };
 }
