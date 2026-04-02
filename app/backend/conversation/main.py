@@ -21,7 +21,7 @@ load_dotenv()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://www.pineshopping.com/"],  # or ["*"] for dev
+    allow_origins=["http://localhost:3000", "https://www.pineshopping.com"],  # or ["*"] for dev
     allow_methods=["*"],
     allow_headers=["*"],
 )
