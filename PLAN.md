@@ -1,6 +1,6 @@
 # Pine — Product Roadmap
 
-_Last updated: 2026-03-31 (Kevin voice + UI session)_
+_Last updated: 2026-04-02 (auto-routing + mic tuning session)_
 
 ---
 
@@ -62,7 +62,7 @@ The goal is to upgrade Pine from Level 3.5 (single intent extraction call + Serp
 - [ ] K7: SerpAPI silent fallback when scraping returns zero results or fails
 
 ### Eric — Voice + UI
-- [ ] E1: Voice input — MediaRecorder + VAD wired in `orb.jsx`; transcription via Python FastAPI backend (ngrok). Transcript feeds `useConvo.ts`. **Architecture note: Kevin chose MediaRecorder + Python backend over Web Speech API for VAD control.** Back-and-forth display loop (products shown alongside orb) still pending.
+- [x] E1: Voice input — MediaRecorder + VAD wired in `orb.jsx`; transcription via Python FastAPI backend (ngrok). Transcript feeds `useConvo.ts`. Auto-routing complete: successful voice search stores results in localStorage (`orbData`) and navigates to `/conversation`; zero-result turns loop back to listening on landing.
 - [ ] E2: Orb UI state machine — idle / listening / processing implemented. `responding` state (during TTS playback) still missing.
 - [x] E3: Voice output via Web Speech Synthesis API — implemented in `useConvo.ts`; Pine speaks `chatResponse` after each turn
 - [x] E4: Result cards with intent-match explanation display (3 cards max, retailer logo link) — `ProductCard.jsx` + `ProductGrid.jsx` live in `/conversation`; D6 explanation slot stubbed with TODO
@@ -148,6 +148,8 @@ The long-term product vision is payment completing on Pine with direct retailer 
 | 2026-03-30 | Landing page UI and logo updated | `hero.jsx`, `inputbar.jsx`, `curated.jsx`, `globals.css` updated to match Eric's HTML. Logo replaced; old logo archived. |
 | 2026-03-31 | Kevin chose MediaRecorder + Python transcription backend over Web Speech Recognition API for voice input | Provides direct control over VAD (RMS-based silence detection), audio chunking, and format handling. Python FastAPI backend (`main.py`) exposed via ngrok serves `/transcribe`, `/upload-chunk`, `/finalize`. Trade-off: requires backend to be running and publicly accessible (ngrok); Web Speech API would be zero-infra. Decision stands for demo; revisit for production. |
 | 2026-03-31 | `useConvo.ts` hook created as voice-side conversation manager | Manages voice history separately from the text conversation page. Calls `searchProducts` directly and speaks reply via TTS. Currently parallel to `/conversation` page — the two paths are not unified yet. Unification is a pending architecture decision. |
+| 2026-04-02 | Voice-to-conversation auto-routing via localStorage handoff | When orb search returns products, `page.tsx` writes `orbData` to localStorage and calls `router.push("/conversation")`. Conversation page reads and clears `orbData` on mount, pre-populating the product grid without a duplicate API call. Zero-result turns stay on landing and re-enter listening. Trade-off: localStorage as cross-route data bus is a temporary pattern — should be replaced with proper state management (React context or URL params) before Phase 3. |
+| 2026-04-02 | VAD threshold tuning — silence detection tightened | SILENCE_THRESHOLD raised 0.015→0.025 (matches SPEECH_THRESHOLD at 0.025), SILENCE_DURATION_MS reduced 1200→500ms. Result: faster auto-stop after speech ends, less missed audio from background noise crossing old threshold. |
 | 2026-03-31 | Intent pivot detection added to schema and prompt | `is_pivot: boolean` added to `IntentExtractionResult`. On pivot, both `accumulatedIntent` and conversation history reset to only the current turn. Prevents prior category attributes from contaminating unrelated searches. Pivot examples embedded in prompt so model can learn the pattern. |
 | 2026-03-31 | Price filter fallback added to route | When budget/attribute filters eliminate all results, `route.ts` returns unfiltered products with an explanatory message rather than an empty grid. Zero-result SerpAPI responses now surface a user-visible message instead of a blank state. |
 

@@ -1,6 +1,6 @@
 # Pine — Active Task Board
 
-_Updated: 2026-03-31 (Kevin voice + UI session) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
+_Updated: 2026-04-02 (auto-routing + mic tuning session) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
 
 ---
 
@@ -19,7 +19,6 @@ _Updated: 2026-03-31 (Kevin voice + UI session) | Owner tags: [D] = Daniel, [K] 
 | # | Task | Owner | Notes |
 |---|---|---|---|
 | I-02 | Competitive research (Google Shopping AI, Perplexity Shopping, etc.) | [D]/[E] | Needed before PRD |
-| E1 | Voice input via MediaRecorder + Python transcription backend | [K] | VAD (RMS-based silence detection), MediaRecorder chunking, sends audio blob to Python FastAPI `/transcribe` via ngrok. Transcript feeds `useConvo.ts` → `searchProducts` → TTS reply. **Note:** uses Python backend instead of Web Speech API — different approach than originally planned. Back-and-forth display loop (products visible on landing) still needed. |
 | E2 | Orb UI state machine | [K] | 3 of 4 states implemented: `idle`, `listening`, `processing`. CSS classes wired. `responding` state (while TTS plays) still missing. |
 
 ---
@@ -33,7 +32,6 @@ _Updated: 2026-03-31 (Kevin voice + UI session) | Owner tags: [D] = Daniel, [K] 
 | K1 | Data Agent: structured query intake contract | [K] | Accept typed query object from Reasoning Agent. Schema in CLAUDE.md. Agree with Daniel before building. |
 | K8 | Direct retailer URL resolution | [K] | **Blocks affiliate monetization.** Kevin to choose and implement one of: (1) SerpAPI Product Results endpoint — takes Google Shopping product ID, returns merchant seller links with direct retailer URLs; extra call per product but keeps SerpAPI as fallback. (2) Amazon Product Advertising API — returns direct Amazon URLs natively, designed for Associates program. (3) Direct scraping — Kevin's Data Agent scrapes retailer pages directly, URL is the page URL. All three valid; Kevin decides based on reliability and rate limits. Enriched result object `url` field MUST be a direct retailer URL — never a google.com/shopping URL. |
 | K2 | Retailer scraping layer | [K] | Adapt existing scraping agent. Start with Amazon + Target + 1 category retailer. Narrow and reliable beats broad and flaky. |
-| E1 | Voice input | [K]/[E] | → Moved to 🟡 In Progress. See notes there. |
 | E2 | Orb UI state machine | [K]/[E] | → Moved to 🟡 In Progress. `responding` state still needed. |
 
 ### Week 2 — Reasoning + Integration
@@ -45,7 +43,6 @@ _Updated: 2026-03-31 (Kevin voice + UI session) | Owner tags: [D] = Daniel, [K] 
 | K5 | Enriched result object construction | [K] | Combine K3+K4 into typed JSON per product per CLAUDE.md schema. `url` field must be direct retailer URL (see K8). Must be stable — Daniel builds D5/D6 against it. |
 | K6 | Sparse result flag | [K] | Flag which hard constraint failed when <3 results returned. Triggers D7. |
 | K7 | SerpAPI silent fallback | [K] | Fires when scraping returns 0 or errors. When falling back to SerpAPI, Kevin must still resolve to direct retailer URLs (see K8) or flag affiliate linking as degraded for that result. |
-| D4 | Dialog adaptation by expertise level | [D] | Classify user vocab on first message (vibe vs. spec). Low-effort after D1-D3. |
 | D5 | Personalized utility scoring | [D] | Score Kevin's enriched results against soft preference vector. Replaces default SerpAPI ordering. Requires K5 stable. |
 | D6 | Intent-match explanation generation | [D] | One sentence per top 3 results using Kevin's review_signals + expressed intent. Highest-visibility Level 4 feature. |
 | D7 | Constraint relaxation logic | [D] | When K6 sparse flag received: relax least-important constraint, re-query, tell user what changed. |
@@ -111,6 +108,16 @@ _Updated: 2026-03-31 (Kevin voice + UI session) | Owner tags: [D] = Daniel, [K] 
 
 ## ✅ Completed
 
+### UI — Discover Page
+
+| # | Task | Completed |
+|---|---|---|
+| ✓ | `/discover` page created (`app/discover/page.jsx`) — 4 curated sections (Trending in Tech, Popular in Home, Top Picks in Style, Trending in Wellness) fetched in parallel via `Promise.all` against `/api/search`. Loading skeletons shown per section. Error state shows friendly message. | 2026-04-02 |
+| ✓ | Reuses `ProductCard.jsx` and `.prod-grid` CSS class — no new card or grid components created. Shows top 3 products per section. | 2026-04-02 |
+| ✓ | "Talk to Pine →" CTA anchored at top of page, navigates to `/`. Primary CTA since conversational agent is Pine's core. | 2026-04-02 |
+| ✓ | Header "Discover" nav link updated to point to `/discover` (was `/`). Uses Next.js `Link` for client-side navigation. | 2026-04-02 |
+| ⚪ | **PLACEHOLDER NOTE:** Section queries are static presets — NOT personalized. Labels are honest ("Trending in…", "Popular in…"). True personalization requires Phase 4 user preference database (Kevin's backend). Replace curated queries with user-signal-driven selection at that point. | backlog |
+
 | # | Task | Completed |
 |---|---|---|
 | ✓ | LLM integration (OpenRouter + GPT-4o-mini) — API route intact | Phase 1 |
@@ -156,6 +163,9 @@ _Updated: 2026-03-31 (Kevin voice + UI session) | Owner tags: [D] = Daniel, [K] 
 | ✓ | `orb.jsx` fully wired for voice — MediaRecorder + Web Audio API VAD (RMS level monitoring, 100ms poll). Speech threshold 0.03, silence threshold 0.015, silence timeout 1200ms auto-stops recording. Audio blob POSTed to Python `/transcribe` endpoint. `listening` + `processing` CSS states active. | 2026-03-31 |
 | ✓ | Intent pivot bug fixed — `is_pivot` field added to `IntentExtractionResult` schema and prompt. On pivot, `page.jsx` resets `accumulatedIntent` and history to only the current turn; no prior category attributes leak into the new query. | 2026-03-31 |
 | ✓ | Price filter fallback added to `route.ts` — when budget/attribute filters remove all results, returns unfiltered products with explanatory message instead of empty grid. Empty SerpAPI response now returns a user-facing message instead of blank state. | 2026-03-31 |
+| ✓ | E1: Voice input auto-routing complete — orb accepts `onComplete` prop; when voice search returns products, `page.tsx` stores results in localStorage as `orbData` and routes to `/conversation`. Conversation page reads `orbData` on mount and pre-populates product grid (skips redundant API call). Zero-result loop (clarification) keeps user on landing and re-enters listening state. | 2026-04-02 |
+| ✓ | Mic VAD threshold tuning — SPEECH_THRESHOLD 0.03→0.025, SILENCE_THRESHOLD 0.015→0.025, SILENCE_DURATION_MS 1200ms→500ms. State order fix: `setListening(false)` now fires before `cleanupRecording()` in the silence timeout path. | 2026-04-02 |
+| ✓ | `useConvo.ts` now passes `products: Product[]` in `onAssistantFinished` callback alongside `resultCount` — enables orb to forward result data to the routing handler without a second API call. | 2026-04-02 |
 
 ---
 
