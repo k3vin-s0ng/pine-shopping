@@ -12,7 +12,7 @@ export default function Navbar() {
       </div>
 
       <ul className="nav-links">
-        <li><a href="/">Discover</a></li>
+        <li><Link href="/discover">Discover</Link></li>
       </ul>
 
       <div className="nav-actions">
