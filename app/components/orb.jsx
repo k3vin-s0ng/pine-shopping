@@ -117,7 +117,7 @@ export default function Orb({ onComplete }) {
       try {
         await sendFinalAudio();
       } catch (err) {
-        console.error("Transcription error:", err);
+        console.warn("[Orb] Transcription unavailable — is the backend running?", err.message);
       } finally {
         setProcessing(false);
         cleanupRecording();
@@ -167,10 +167,19 @@ export default function Orb({ onComplete }) {
     const extension = mimeTypeRef.current.includes("webm") ? "webm" : "ogg";
     form.append("file", finalBlob, `recording.${extension}`);
 
-    const res = await fetch("https://nonvertebral-winter-pronunciative.ngrok-free.dev/transcribe", {
-      method: "POST",
-      body: form,
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+    let res;
+    try {
+      res = await fetch("https://nonvertebral-winter-pronunciative.ngrok-free.dev/transcribe", {
+        method: "POST",
+        body: form,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     const text = await res.text();
 

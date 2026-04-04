@@ -10,6 +10,7 @@ export interface Product {
   match: string;
   img: string;
   link: string;
+  affiliate_degraded?: boolean;
 }
 
 export interface RankedProduct extends Product {

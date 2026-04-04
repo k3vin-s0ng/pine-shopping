@@ -1,5 +1,4 @@
 "use client";
-import { useState } from "react";
 
 const PineconeSVG = () => (
   <svg width="28" height="36" viewBox="0 0 28 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -13,13 +12,7 @@ const PineconeSVG = () => (
   </svg>
 );
 
-export default function LeftPanel({ query, status, onRestart, onStop, onRefine, refineChips = [] }) {
-  const [listening, setListening] = useState(false);
-
-  function toggleListening() {
-    setListening((l) => !l);
-  }
-
+export default function LeftPanel({ query, status, onRestart, onStop, onRefine, refineChips = [], listening = false, processing = false, speaking = false, onOrbClick }) {
   return (
     <aside className="conv-left">
       {/* Status */}
@@ -38,9 +31,9 @@ export default function LeftPanel({ query, status, onRestart, onStop, onRefine, 
       {/* Small orb */}
       <div className="conv-orb-stage">
         <div
-          className={`conv-orb${listening ? " listening" : ""}`}
-          onClick={toggleListening}
-          title={listening ? "Stop listening" : "Tap to listen"}
+          className={`conv-orb${listening ? " listening" : ""}${processing ? " processing" : ""}${speaking ? " speaking" : ""}`}
+          onClick={onOrbClick}
+          title={processing ? "Processing…" : speaking ? "Pine is speaking" : listening ? "Stop listening" : "Tap to listen"}
         >
           <PineconeSVG />
         </div>

@@ -667,6 +667,18 @@ body {
     0 0 0 2px rgba(184,151,90,0.45),
     0 0 28px rgba(184,151,90,0.2);
 }
+.conv-orb.speaking {
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.1) inset,
+    0 12px 40px rgba(21,43,30,0.6),
+    0 0 0 2px rgba(90,184,151,0.5),
+    0 0 28px rgba(90,184,151,0.25);
+  animation: conv-orb-speak 1.8s ease-in-out infinite;
+}
+@keyframes conv-orb-speak {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.04); }
+}
 
 .orb-controls { display: flex; align-items: center; gap: 6px; }
 

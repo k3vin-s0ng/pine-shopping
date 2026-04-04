@@ -6,6 +6,7 @@ import Navbar from "../components/header";
 import LeftPanel from "../components/conversation/LeftPanel";
 import ProductGrid from "../components/conversation/ProductGrid";
 import BottomBar from "../components/conversation/BottomBar";
+import { useVoiceRecorder } from "../lib/useVoiceRecorder";
 
 function ConversationView() {
   const searchParams = useSearchParams();
@@ -20,14 +21,49 @@ function ConversationView() {
   const [status, setStatus] = useState("Pine is thinking…");
   const [loading, setLoading] = useState(true);
   const [refineChips, setRefineChips] = useState([]);
-  const [micActive, setMicActive] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const [bottomInput, setBottomInput] = useState("");
   // D3: accumulated intent — merges hard_constraints and soft_preferences forward across turns
   // Client-side merge mirrors mergeIntent() in intentExtraction.ts (server-only, not importable here)
   const [accumulatedIntent, setAccumulatedIntent] = useState({});
 
+  // Returns a Promise that resolves after TTS finishes (or immediately if unavailable)
+  function speak(text) {
+    return new Promise((resolve) => {
+      if (!text || typeof window === "undefined" || !window.speechSynthesis) {
+        resolve();
+        return;
+      }
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.05;
+      utterance.pitch = 1;
+
+      // Same voice preference as useConvo.ts
+      const applyVoice = () => {
+        const voices = window.speechSynthesis.getVoices();
+        const preferred =
+          voices.find(
+            (v) => v.lang === "en-US" && /samantha|google us english|zira/i.test(v.name)
+          ) ?? voices.find((v) => v.lang.startsWith("en"));
+        if (preferred) utterance.voice = preferred;
+      };
+      applyVoice();
+      // Voices list may be empty on first call — retry when loaded
+      if (window.speechSynthesis.getVoices().length === 0) {
+        window.speechSynthesis.addEventListener("voiceschanged", applyVoice, { once: true });
+      }
+
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => { setIsSpeaking(false); resolve(); };
+      utterance.onerror = () => { setIsSpeaking(false); resolve(); };
+      window.speechSynthesis.speak(utterance);
+    });
+  }
+
+  // Returns { chatResponse } so voice wrapper can speak the reply
   async function handleSubmit(text) {
-    if (!text.trim()) return;
+    if (!text.trim()) return null;
     setStatus("Pine is thinking…");
     setLoading(true);
 
@@ -105,17 +141,39 @@ function ConversationView() {
       } else {
         setRefineChips([]);
       }
+
+      return { chatResponse: data.chatResponse || "" };
     } catch (err) {
       console.error("[ConversationPage] Search failed:", err);
       setChatResponse("Something went wrong. Please try again.");
       setProducts([]);
       setStatus("Pine is listening");
+      return { chatResponse: "Something went wrong. Please try again." };
     } finally {
       setLoading(false);
     }
   }
 
+  // Voice entry point: submit the transcript then speak the reply.
+  // Returning a Promise here means the recorder awaits this before restarting (continuous mode).
+  async function handleVoiceQuery(text) {
+    const result = await handleSubmit(text);
+    if (result?.chatResponse) {
+      await speak(result.chatResponse);
+    }
+  }
+
+  // Hook called after function definitions so handleVoiceQuery is in scope.
+  // The ref inside the hook always calls the latest version regardless of order.
+  const { listening: voiceListening, processing: voiceProcessing, toggle: toggleVoice } =
+    useVoiceRecorder({
+      onTranscript: handleVoiceQuery,
+      onInterimTranscript: (text) => setBottomInput(text),
+      continuous: true,
+    });
+
   function handleRestart() {
+    window.speechSynthesis?.cancel();
     setAccumulatedIntent({});
     localStorage.clear();
     router.push("/");
@@ -165,6 +223,10 @@ function ConversationView() {
           onStop={handleStop}
           onRefine={handleRefine}
           refineChips={refineChips}
+          listening={voiceListening}
+          processing={voiceProcessing}
+          speaking={isSpeaking}
+          onOrbClick={toggleVoice}
         />
         <div className="conv-right">
           <div className="cards-area">
@@ -177,8 +239,8 @@ function ConversationView() {
           </div>
           <BottomBar
             onSubmit={handleSubmit}
-            onMicClick={() => setMicActive((m) => !m)}
-            micActive={micActive}
+            onMicClick={toggleVoice}
+            micActive={voiceListening || voiceProcessing || isSpeaking}
             inputValue={bottomInput}
             setInputValue={setBottomInput}
           />

@@ -4,6 +4,60 @@ import { Product } from "@/app/lib/products";
 
 const SERP_API_KEY = process.env.SERP_API_KEY;
 
+interface OnlineSeller {
+  name: string;
+  link: string;
+  price?: string;
+  base_price?: number;
+}
+
+const PREFERRED_RETAILERS = ["amazon", "target", "walmart", "bestbuy", "best buy", "nordstrom"];
+
+function pickBestSeller(sellers: OnlineSeller[]): OnlineSeller | null {
+  if (!sellers || sellers.length === 0) return null;
+  for (const preferred of PREFERRED_RETAILERS) {
+    const match = sellers.find((s) => s.name.toLowerCase().includes(preferred));
+    if (match) return match;
+  }
+  return sellers[0];
+}
+
+async function resolveRetailerUrls(rawItems: any[]): Promise<any[]> {
+  const resolved = await Promise.all(
+    rawItems.map(async (item) => {
+      if (!item.serpapi_immersive_product_api) {
+        return { ...item, affiliate_degraded: true };
+      }
+      try {
+        const response = await fetch(item.serpapi_immersive_product_api);
+        const data = await response.json();
+
+        const sellers: OnlineSeller[] = data?.sellers_results?.online_sellers ?? [];
+        const best = pickBestSeller(sellers);
+
+        if (!best) {
+          return { ...item, affiliate_degraded: true };
+        }
+
+        return {
+          ...item,
+          product_link: best.link,
+          source: best.name,
+          ...(best.price !== undefined ? { price: best.price } : {}),
+          ...(best.base_price !== undefined ? { extracted_price: best.base_price } : {}),
+        };
+      } catch {
+        return { ...item, affiliate_degraded: true };
+      }
+    })
+  );
+
+  const resolvedCount = resolved.filter((i) => !i.affiliate_degraded).length;
+  console.log(`[URL Resolution] ${resolvedCount}/${rawItems.length} resolved to direct retailer URLs`);
+
+  return resolved;
+}
+
 function formatReviews(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return String(n);
@@ -22,10 +76,8 @@ function transformProducts(items: any[]): Product[] {
     // once Kevin's Data Agent returns enriched result objects
     match: `${Math.max(60, 99 - i * 3)}%`,
     img: item.thumbnail || "",
-    // TODO B-03: item.product_link is a Google Shopping URL, not a direct retailer URL
-    // Affiliate linking (Skimlinks/Amazon Associates) requires direct retailer URLs
-    // Kevin's Data Agent (K8) is responsible for resolving this before enriched results replace SerpAPI
     link: item.product_link || "",
+    affiliate_degraded: item.affiliate_degraded ?? false,
   }));
 }
 
@@ -47,6 +99,7 @@ async function callSerpAPI(searchQuery: string): Promise<any[]> {
 
   const results = data.shopping_results || [];
   //console.log("[SerpAPI] Got", results.length, "results");
+  if (results.length > 0) console.log("[SerpAPI] results[0]:", JSON.stringify(results[0], null, 2));
   return results;
 }
 
@@ -96,8 +149,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Step 5: Transform and filter by hard constraint price bounds
-  let products = transformProducts(rawItems);
+  // Step 5: Resolve raw SerpAPI results to direct retailer URLs (parallel, per-product fallback)
+  const resolvedItems = await resolveRetailerUrls(rawItems);
+
+  // Step 6: Transform and filter by hard constraint price bounds
+  let products = transformProducts(resolvedItems);
   const { budget_ceiling, budget_floor, must_have_attributes } = intent.hard_constraints;
 
   let filteredProducts = [...products];
