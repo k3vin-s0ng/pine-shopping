@@ -133,7 +133,7 @@ function ConversationView() {
   // Fire initial search on mount using the URL query param
   useEffect(() => {
     const saved = localStorage.getItem("orbData");
-
+    localStorage.clear();
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
