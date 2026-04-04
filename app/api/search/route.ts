@@ -10,7 +10,7 @@ interface OnlineSeller {
   price?: string;
   base_price?: number;
 }
-
+ 
 const PREFERRED_RETAILERS = ["amazon", "target", "walmart", "bestbuy", "best buy", "nordstrom"];
 
 function pickBestSeller(sellers: OnlineSeller[]): OnlineSeller | null {
