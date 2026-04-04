@@ -117,6 +117,7 @@ function ConversationView() {
 
   function handleRestart() {
     setAccumulatedIntent({});
+    localStorage.clear();
     router.push("/");
   }
 
