@@ -108,16 +108,6 @@ _Updated: 2026-04-02 (auto-routing + mic tuning session) | Owner tags: [D] = Dan
 
 ## ✅ Completed
 
-### UI — Discover Page
-
-| # | Task | Completed |
-|---|---|---|
-| ✓ | `/discover` page created (`app/discover/page.jsx`) — 4 curated sections (Trending in Tech, Popular in Home, Top Picks in Style, Trending in Wellness) fetched in parallel via `Promise.all` against `/api/search`. Loading skeletons shown per section. Error state shows friendly message. | 2026-04-02 |
-| ✓ | Reuses `ProductCard.jsx` and `.prod-grid` CSS class — no new card or grid components created. Shows top 3 products per section. | 2026-04-02 |
-| ✓ | "Talk to Pine →" CTA anchored at top of page, navigates to `/`. Primary CTA since conversational agent is Pine's core. | 2026-04-02 |
-| ✓ | Header "Discover" nav link updated to point to `/discover` (was `/`). Uses Next.js `Link` for client-side navigation. | 2026-04-02 |
-| ⚪ | **PLACEHOLDER NOTE:** Section queries are static presets — NOT personalized. Labels are honest ("Trending in…", "Popular in…"). True personalization requires Phase 4 user preference database (Kevin's backend). Replace curated queries with user-signal-driven selection at that point. | backlog |
-
 | # | Task | Completed |
 |---|---|---|
 | ✓ | LLM integration (OpenRouter + GPT-4o-mini) — API route intact | Phase 1 |
