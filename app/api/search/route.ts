@@ -36,7 +36,7 @@ async function callSerpAPI(searchQuery: string): Promise<any[]> {
   url.searchParams.set("api_key", SERP_API_KEY!);
   url.searchParams.set("num", "15");
 
-  console.log("[SerpAPI] Querying:", searchQuery);
+  //console.log("[SerpAPI] Querying:", searchQuery);
   const response = await fetch(url.toString());
   const data = await response.json();
 
@@ -46,7 +46,7 @@ async function callSerpAPI(searchQuery: string): Promise<any[]> {
   }
 
   const results = data.shopping_results || [];
-  console.log("[SerpAPI] Got", results.length, "results");
+  //console.log("[SerpAPI] Got", results.length, "results");
   return results;
 }
 
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
   // accumulatedIntent is the client-side merged state from prior turns — logged here for
   // observability; will be consumed directly by D5 utility scoring once Kevin's Data Agent ships
   if (accumulatedIntent && Object.keys(accumulatedIntent).length > 0) {
-    console.log("[POST /api/search] Accumulated intent:", JSON.stringify(accumulatedIntent));
+    //console.log("[POST /api/search] Accumulated intent:", JSON.stringify(accumulatedIntent));
   }
 
   if (!query) return NextResponse.json({ error: "Query required" }, { status: 400 });
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
   // Step 2: Clarification needed — skip search, return question as chat message
   if (intent.clarification_needed) {
     const message = intent.clarification_question || "Could you tell me a bit more about what you're looking for?";
-    console.log("[POST /api/search] Clarification needed:", message);
+    //console.log("[POST /api/search] Clarification needed:", message);
     return NextResponse.json({ products: [], chatResponse: message, clarificationNeeded: true, intent });
   }
 
@@ -122,6 +122,6 @@ export async function POST(request: NextRequest) {
     ? "I couldn't find exact matches within your constraints, but here are the closest options I found."
     : (intent.chat_response || "Here are the best matches I found for you!");
 
-  console.log("[POST /api/search] Returning", filteredProducts.length, "products for:", searchQuery);
+  //console.log("[POST /api/search] Returning", filteredProducts.length, "products for:", searchQuery);
   return NextResponse.json({ products: filteredProducts, chatResponse, clarificationNeeded: false, intent });
 }
