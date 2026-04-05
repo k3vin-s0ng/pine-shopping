@@ -1,3 +1,5 @@
+// [KEVIN - this hook is preserved for the Data Agent pipeline and future server-side STT integration]
+// The home page orb no longer imports this directly — see orb.jsx for current pipeline.
 "use client";
 
 import { useRef, useState, useCallback } from "react";

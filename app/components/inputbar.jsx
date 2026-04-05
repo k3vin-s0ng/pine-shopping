@@ -1,28 +1,32 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
- 
-export default function InputBar() {
+
+export default function InputBar({ interimValue = "", micActive = false }) {
   const [text, setText] = useState("");
-  const [listening, setListening] = useState(false);
   const router = useRouter();
- 
+
+  // Show live voice transcript while mic is active; fall back to typed text
+  const inputDisplayValue = micActive ? interimValue : text;
+
   function handleSubmit() {
-    if (!text.trim()) return;
-    router.push(`/conversation?q=${encodeURIComponent(text.trim())}`);
+    const query = text.trim();
+    if (!query) return;
+    router.push(`/conversation?q=${encodeURIComponent(query)}`);
   }
- 
-  function toggleListen() {
-    setListening(true);
-    setTimeout(() => setListening(false), 4000);
+
+  function handleChange(e) {
+    // Don't overwrite voice interim text while mic is active
+    if (!micActive) setText(e.target.value);
   }
- 
+
   return (
     <div className="input-bar">
-      {/* Mic button — SVG icon, not emoji */}
+      {/* Mic button — red + pulsing when orb is listening */}
       <button
-        className={`mic-btn-bar ${listening ? "active" : ""}`}
-        onClick={toggleListen}
+        className={`mic-btn-bar${micActive ? " active" : ""}`}
+        disabled
+        title={micActive ? "Listening…" : "Use the orb above to start voice input"}
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
@@ -31,17 +35,17 @@ export default function InputBar() {
           <line x1="8" y1="22" x2="16" y2="22" />
         </svg>
       </button>
- 
+
       <div className="input-wrap">
         <input
           id="mainInput"
           className="main-input"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
+          value={inputDisplayValue}
+          onChange={handleChange}
           onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-          placeholder="Tell Pine what you're looking for…"
+          placeholder={micActive ? "Listening…" : "Tell Pine what you're looking for…"}
+          readOnly={micActive}
         />
-        {/* Send button — SVG icon, not emoji */}
         <button className="send-btn" onClick={handleSubmit}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <line x1="22" y1="2" x2="11" y2="13" />
@@ -49,8 +53,8 @@ export default function InputBar() {
           </svg>
         </button>
       </div>
- 
-      {/* Bottom navigation — was missing entirely */}
+
+      {/* Bottom navigation */}
       <div className="bar-nav">
         <a href="/" className="bar-nav-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">

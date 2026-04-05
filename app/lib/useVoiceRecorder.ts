@@ -85,8 +85,8 @@ export function useVoiceRecorder({
       const trimmed = finalTranscript.trim();
 
       if (trimmed) {
-        // Clear interim display before processing
-        onInterimRef.current?.("");
+        // Linger for 1s so the user can see their spoken text before it clears
+        setTimeout(() => onInterimRef.current?.(""), 1000);
         setProcessing(true);
         try {
           // Awaiting here means the recorder waits for TTS to finish before restarting

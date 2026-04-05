@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "./components/header";
 import Hero from "./components/hero";
@@ -14,6 +15,8 @@ type OrbResult = {
 
 export default function Page() {
   const router = useRouter();
+  const [orbListening, setOrbListening] = useState(false);
+  const [orbInterimText, setOrbInterimText] = useState("");
 
   const handleComplete = ({ products, resultCount }: OrbResult) => {
     localStorage.setItem("orbData", JSON.stringify({ products, resultCount }));
@@ -23,9 +26,13 @@ export default function Page() {
   return (
     <main>
       <Navbar />
-      <Hero onComplete={handleComplete} />
+      <Hero
+        onComplete={handleComplete}
+        onListeningChange={setOrbListening}
+        onInterimTranscript={setOrbInterimText}
+      />
       <Curated />
-      <InputBar />
+      <InputBar micActive={orbListening} interimValue={orbInterimText} />
     </main>
   );
 }

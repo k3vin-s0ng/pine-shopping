@@ -61,16 +61,19 @@ function ConversationView() {
     });
   }
 
-  // Returns { chatResponse } so voice wrapper can speak the reply
-  async function handleSubmit(text) {
+  // Returns { chatResponse } so voice wrapper can speak the reply.
+  // opts.priorHistory / opts.priorAccumulatedIntent override React state snapshots —
+  // used on mount when pineHandoff data is available before state has hydrated.
+  async function handleSubmit(text, opts = {}) {
     if (!text.trim()) return null;
     setStatus("Pine is thinking…");
     setLoading(true);
 
     // Snapshot prior history BEFORE mutating state — sent to API so extractIntent
     // can append the current message once. newHistory is only used for state.
-    const priorHistory = [...history];
-    const newHistory = [...history, { role: "user", content: text }];
+    const priorHistory = opts.priorHistory ?? [...history];
+    const currentIntent = opts.priorAccumulatedIntent ?? accumulatedIntent;
+    const newHistory = [...priorHistory, { role: "user", content: text }];
     setHistory(newHistory);
     setQuery(text);
 
@@ -79,7 +82,7 @@ function ConversationView() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // Send priorHistory (without current message) — intentExtraction.ts appends userMessage itself
-        body: JSON.stringify({ query: text, history: priorHistory, accumulatedIntent }),
+        body: JSON.stringify({ query: text, history: priorHistory, accumulatedIntent: currentIntent }),
       });
 
       const data = await res.json();
@@ -188,19 +191,25 @@ function ConversationView() {
     handleSubmit(chipText);
   }
 
-  // Fire initial search on mount using the URL query param
+  // Fire initial search on mount
   useEffect(() => {
-    const saved = localStorage.getItem("orbData");
-    localStorage.clear();
-    if (saved) {
+    const raw = localStorage.getItem("pineHandoff");
+    if (raw) {
+      localStorage.removeItem("pineHandoff");
       try {
-        const parsed = JSON.parse(saved);
-        setProducts(parsed.products || []);
-        setLoading(false);
-        setStatus("Pine is listening");
+        const parsed = JSON.parse(raw);
+        // Hydrate accumulatedIntent into state so subsequent turns inherit it.
+        // priorHistory and priorAccumulatedIntent are passed directly to handleSubmit
+        // because React state setters are async — the closure would see stale [] otherwise.
+        const handoffIntent = parsed.accumulatedIntent || {};
+        setAccumulatedIntent(handoffIntent);
+        handleSubmit(parsed.lastQuery, {
+          priorHistory: parsed.history || [],
+          priorAccumulatedIntent: handoffIntent,
+        });
         return;
       } catch (err) {
-        console.error("Could not parse orbData:", err);
+        console.error("[ConversationPage] Could not parse pineHandoff:", err);
       }
     }
 
