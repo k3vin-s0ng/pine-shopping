@@ -17,14 +17,13 @@ export interface IntentExtractionResult {
     quality_priority?: "low" | "medium" | "high";
   };
   search_query: string;
+  related_search_queries?: string[];
   raw_intent_summary: string;
   confidence_score: number;
   clarification_needed: boolean;
   clarification_question?: string;
   chat_response?: string;
-  // D4: vocabulary-derived expertise level — drives clarification question style
   user_expertise: "novice" | "intermediate" | "expert";
-  // True when user switches to an incompatible product category — triggers accumulation reset
   is_pivot: boolean;
 }
 
@@ -40,13 +39,20 @@ const openai = new OpenAI({
 
 const MODEL = "openai/gpt-4o-mini";
 
-// ─── Strip HTML tags for clean LLM context ──────────────────────────────────
-
 function stripHtml(str: string): string {
   return str.replace(/<[^>]*>/g, "").trim();
 }
 
-// ─── Main extraction function ────────────────────────────────────────────────
+function normalizeRelatedSearchQueries(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  return [...new Set(
+    value
+      .filter((q): q is string => typeof q === "string")
+      .map((q) => q.trim())
+      .filter(Boolean)
+  )].slice(0, 2);
+}
 
 export async function extractIntent(
   userMessage: string,
@@ -56,6 +62,7 @@ export async function extractIntent(
     hard_constraints: {},
     soft_preferences: {},
     search_query: userMessage,
+    related_search_queries: [],
     raw_intent_summary: userMessage,
     confidence_score: 0.6,
     clarification_needed: false,
@@ -69,8 +76,6 @@ export async function extractIntent(
     return fallback;
   }
 
-  // Build message array: system prompt + full conversation history + current message
-  // CRITICAL: full history must always reach the LLM — see CLAUDE.md context retention note
   const historyMessages: { role: "user" | "assistant"; content: string }[] = (history || [])
     .filter((m) => m.content.trim())
     .map((m) => ({
@@ -99,7 +104,6 @@ export async function extractIntent(
     const parsed = JSON.parse(content);
     console.log("[intentExtraction] Extracted:", JSON.stringify(parsed));
 
-    // Validate required fields; fall back if missing
     if (typeof parsed.search_query !== "string" || typeof parsed.confidence_score !== "number") {
       console.error("[intentExtraction] Schema validation failed, using fallback");
       return fallback;
@@ -109,6 +113,7 @@ export async function extractIntent(
       hard_constraints: parsed.hard_constraints ?? {},
       soft_preferences: parsed.soft_preferences ?? {},
       search_query: parsed.search_query || userMessage,
+      related_search_queries: normalizeRelatedSearchQueries(parsed.related_search_queries),
       raw_intent_summary: parsed.raw_intent_summary || userMessage,
       confidence_score: parsed.confidence_score,
       clarification_needed: parsed.clarification_needed === true,
@@ -122,16 +127,6 @@ export async function extractIntent(
     return fallback;
   }
 }
-
-// ─── D3: Preference accumulator ──────────────────────────────────────────────
-// Merges a new extraction into the accumulated intent from prior turns.
-// hard_constraints and soft_preferences are unioned forward — never dropped.
-// user_expertise, confidence_score, clarification fields, and search_query
-// always come from the latest turn.
-//
-// NOTE: The client-side merge in page.jsx duplicates this logic because
-// intentExtraction.ts is server-only and cannot be imported by client components.
-// Keep both in sync if you change the merge strategy.
 
 export function mergeIntent(
   accumulated: Partial<IntentExtractionResult>,
@@ -159,12 +154,13 @@ export function mergeIntent(
         ]),
       ],
     },
+    search_query: latest.search_query,
+    related_search_queries: latest.related_search_queries ?? [],
     user_expertise: latest.user_expertise,
     confidence_score: latest.confidence_score,
     clarification_needed: latest.clarification_needed,
     clarification_question: latest.clarification_question,
     chat_response: latest.chat_response,
-    search_query: latest.search_query,
     is_pivot: latest.is_pivot,
   };
 }

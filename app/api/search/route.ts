@@ -3,6 +3,8 @@ import { extractIntent } from "@/app/lib/intentExtraction";
 import { Product } from "@/app/lib/products";
 
 const SERP_API_KEY = process.env.SERP_API_KEY;
+const SEARCH_VARIANT_COUNT = 3;
+const RESULTS_PER_QUERY = 10;
 
 interface OnlineSeller {
   name: string;
@@ -10,15 +12,24 @@ interface OnlineSeller {
   price?: string;
   base_price?: number;
 }
- 
-const PREFERRED_RETAILERS = ["amazon", "target", "walmart", "bestbuy", "best buy", "nordstrom"];
+
+const PREFERRED_RETAILERS = [
+  "amazon",
+  "target",
+  "walmart",
+  "bestbuy",
+  "best buy",
+  "nordstrom",
+];
 
 function pickBestSeller(sellers: OnlineSeller[]): OnlineSeller | null {
   if (!sellers || sellers.length === 0) return null;
+
   for (const preferred of PREFERRED_RETAILERS) {
     const match = sellers.find((s) => s.name.toLowerCase().includes(preferred));
     if (match) return match;
   }
+
   return sellers[0];
 }
 
@@ -28,6 +39,7 @@ async function resolveRetailerUrls(rawItems: any[]): Promise<any[]> {
       if (!item.serpapi_immersive_product_api) {
         return { ...item, affiliate_degraded: true };
       }
+
       try {
         const response = await fetch(item.serpapi_immersive_product_api);
         const data = await response.json();
@@ -53,7 +65,9 @@ async function resolveRetailerUrls(rawItems: any[]): Promise<any[]> {
   );
 
   const resolvedCount = resolved.filter((i) => !i.affiliate_degraded).length;
-  console.log(`[URL Resolution] ${resolvedCount}/${rawItems.length} resolved to direct retailer URLs`);
+  console.log(
+    `[URL Resolution] ${resolvedCount}/${rawItems.length} resolved to direct retailer URLs`
+  );
 
   return resolved;
 }
@@ -63,22 +77,16 @@ function formatReviews(n: number): string {
   return String(n);
 }
 
-function transformProducts(items: any[]): Product[] {
-  return (items || []).map((item: any, i: number) => ({
-    name: item.title || "Unknown Product",
-    cat: item.source || "Shopping",
-    desc: item.snippet || `Sold by ${item.source || "online store"}${item.delivery ? ` · ${item.delivery}` : ""}`,
-    price: item.price || "$0",
-    num: typeof item.extracted_price === "number" ? item.extracted_price : 0,
-    rating: typeof item.rating === "number" ? String(item.rating) : "0",
-    reviews: typeof item.reviews === "number" ? formatReviews(item.reviews) : "0",
-    // TODO D5: Replace with real utility score from soft preference vector
-    // once Kevin's Data Agent returns enriched result objects
-    match: `${Math.max(60, 99 - i * 3)}%`,
-    img: item.thumbnail || "",
-    link: item.product_link || "",
-    affiliate_degraded: item.affiliate_degraded ?? false,
-  }));
+function buildSearchQueries(baseQuery: string, intent: any): string[] {
+  const related = Array.isArray(intent?.related_search_queries)
+    ? intent.related_search_queries
+    : [];
+
+  const queries = [baseQuery, ...related]
+    .map((q) => (typeof q === "string" ? q.trim() : ""))
+    .filter(Boolean);
+
+  return [...new Set(queries)].slice(0, SEARCH_VARIANT_COUNT);
 }
 
 async function callSerpAPI(searchQuery: string): Promise<any[]> {
@@ -86,9 +94,8 @@ async function callSerpAPI(searchQuery: string): Promise<any[]> {
   url.searchParams.set("engine", "google_shopping");
   url.searchParams.set("q", searchQuery);
   url.searchParams.set("api_key", SERP_API_KEY!);
-  url.searchParams.set("num", "15");
+  url.searchParams.set("num", String(RESULTS_PER_QUERY));
 
-  //console.log("[SerpAPI] Querying:", searchQuery);
   const response = await fetch(url.toString());
   const data = await response.json();
 
@@ -98,45 +105,94 @@ async function callSerpAPI(searchQuery: string): Promise<any[]> {
   }
 
   const results = data.shopping_results || [];
-  //console.log("[SerpAPI] Got", results.length, "results");
-  if (results.length > 0) console.log("[SerpAPI] results[0]:", JSON.stringify(results[0], null, 2));
+  if (results.length > 0) {
+    console.log("[SerpAPI] results[0]:", JSON.stringify(results[0], null, 2));
+  }
+
   return results;
 }
 
-// POST: LLM intent extraction → refined SerpAPI query → filtered products
+async function callSerpAPIBatch(queries: string[]): Promise<any[]> {
+  const settled = await Promise.allSettled(queries.map((q) => callSerpAPI(q)));
+
+  const merged: any[] = [];
+  settled.forEach((result, index) => {
+    if (result.status === "fulfilled") {
+      merged.push(...result.value);
+    } else {
+      console.warn(`[SerpAPI] Query failed: ${queries[index]}`, result.reason);
+    }
+  });
+
+  const seen = new Set<string>();
+  return merged.filter((item) => {
+    const key = (item.link || item.product_link || item.title || "").toLowerCase().trim();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function transformProducts(items: any[]): Product[] {
+  return (items || []).map((item: any, i: number) => ({
+    name: item.title || "Unknown Product",
+    cat: item.source || "Shopping",
+    desc:
+      item.snippet ||
+      `Sold by ${item.source || "online store"}${item.delivery ? ` · ${item.delivery}` : ""}`,
+    price: item.price || "$0",
+    num: typeof item.extracted_price === "number" ? item.extracted_price : 0,
+    rating: typeof item.rating === "number" ? String(item.rating) : "0",
+    reviews: typeof item.reviews === "number" ? formatReviews(item.reviews) : "0",
+    match: `${Math.max(60, 99 - i * 3)}%`,
+    img: item.thumbnail || "",
+    link: item.product_link || "",
+    affiliate_degraded: item.affiliate_degraded ?? false,
+  }));
+}
+
+// POST: LLM intent extraction → expanded SerpAPI query set → filtered products
 export async function POST(request: NextRequest) {
   const { query, history, accumulatedIntent } = await request.json();
-  // accumulatedIntent is the client-side merged state from prior turns — logged here for
-  // observability; will be consumed directly by D5 utility scoring once Kevin's Data Agent ships
+
   if (accumulatedIntent && Object.keys(accumulatedIntent).length > 0) {
-    //console.log("[POST /api/search] Accumulated intent:", JSON.stringify(accumulatedIntent));
+    console.log("[POST /api/search] Accumulated intent present");
   }
 
   if (!query) return NextResponse.json({ error: "Query required" }, { status: 400 });
-  if (!SERP_API_KEY) return NextResponse.json({ error: "SERP_API_KEY not configured" }, { status: 500 });
-
-  // Step 1: Extract structured intent via LLM (full conversation history passed — CRITICAL)
-  const intent = await extractIntent(query, history);
-
-  // Step 2: Clarification needed — skip search, return question as chat message
-  if (intent.clarification_needed) {
-    const message = intent.clarification_question || "Could you tell me a bit more about what you're looking for?";
-    //console.log("[POST /api/search] Clarification needed:", message);
-    return NextResponse.json({ products: [], chatResponse: message, clarificationNeeded: true, intent });
+  if (!SERP_API_KEY) {
+    return NextResponse.json({ error: "SERP_API_KEY not configured" }, { status: 500 });
   }
 
-  // Step 3: Use search_query from structured output directly (already incorporates all constraints)
-  const searchQuery = intent.search_query || query;
+  const intent = await extractIntent(query, history);
 
-  // Step 4: Call SerpAPI
+  if (intent.clarification_needed) {
+    const message =
+      intent.clarification_question ||
+      "Could you tell me a bit more about what you're looking for?";
+    return NextResponse.json({
+      products: [],
+      chatResponse: message,
+      clarificationNeeded: true,
+      intent,
+    });
+  }
+
+  const baseQuery = intent.search_query || query;
+  const searchQueries = buildSearchQueries(baseQuery, intent);
+
+  console.log("[Search] Queries:", searchQueries);
+
   let rawItems: any[];
   try {
-    rawItems = await callSerpAPI(searchQuery);
+    rawItems = await callSerpAPIBatch(searchQueries);
+
     if (rawItems.length === 0) {
-      console.warn("[POST /api/search] SerpAPI returned 0 results for query:", searchQuery);
+      console.warn("[POST /api/search] SerpAPI returned 0 results for queries:", searchQueries);
       return NextResponse.json({
         products: [],
-        chatResponse: `I couldn't find results for that — could you describe what you're looking for differently?`,
+        chatResponse:
+          "I couldn't find results for that — could you describe what you're looking for differently?",
         clarificationNeeded: false,
         intent,
       });
@@ -144,21 +200,32 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error("[POST /api/search] SerpAPI failed:", err);
     return NextResponse.json(
-      { error: "Search service unavailable", products: [], chatResponse: "I'm having trouble searching right now — please try again in a moment.", clarificationNeeded: false, intent },
+      {
+        error: "Search service unavailable",
+        products: [],
+        chatResponse: "I'm having trouble searching right now — please try again in a moment.",
+        clarificationNeeded: false,
+        intent,
+      },
       { status: 502 }
     );
   }
 
-  // Step 5: Resolve raw SerpAPI results to direct retailer URLs (parallel, per-product fallback)
   const resolvedItems = await resolveRetailerUrls(rawItems);
 
-  // Step 6: Transform and filter by hard constraint price bounds
-  let products = transformProducts(resolvedItems);
+  const products = transformProducts(resolvedItems);
   const { budget_ceiling, budget_floor, must_have_attributes } = intent.hard_constraints;
 
   let filteredProducts = [...products];
-  if (budget_ceiling) filteredProducts = filteredProducts.filter((p) => p.num > 0 && p.num <= budget_ceiling);
-  if (budget_floor) filteredProducts = filteredProducts.filter((p) => p.num >= budget_floor);
+
+  if (budget_ceiling) {
+    filteredProducts = filteredProducts.filter((p) => p.num > 0 && p.num <= budget_ceiling);
+  }
+
+  if (budget_floor) {
+    filteredProducts = filteredProducts.filter((p) => p.num >= budget_floor);
+  }
+
   if (must_have_attributes && must_have_attributes.length > 0) {
     const attrs = must_have_attributes.map((a) => a.toLowerCase());
     filteredProducts = filteredProducts.filter((p) =>
@@ -166,18 +233,24 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Fallback: if filtering removed all results, return unfiltered with explanatory message
   let priceFilterApplied = true;
   if (filteredProducts.length === 0 && products.length > 0) {
-    console.warn("[POST /api/search] Filters removed all results — returning unfiltered. Query:", searchQuery);
+    console.warn(
+      "[POST /api/search] Filters removed all results — returning unfiltered. Query:",
+      searchQueries
+    );
     filteredProducts = products;
     priceFilterApplied = false;
   }
 
   const chatResponse = !priceFilterApplied
     ? "I couldn't find exact matches within your constraints, but here are the closest options I found."
-    : (intent.chat_response || "Here are the best matches I found for you!");
+    : intent.chat_response || "Here are the best matches I found for you!";
 
-  //console.log("[POST /api/search] Returning", filteredProducts.length, "products for:", searchQuery);
-  return NextResponse.json({ products: filteredProducts, chatResponse, clarificationNeeded: false, intent });
+  return NextResponse.json({
+    products: filteredProducts,
+    chatResponse,
+    clarificationNeeded: false,
+    intent,
+  });
 }

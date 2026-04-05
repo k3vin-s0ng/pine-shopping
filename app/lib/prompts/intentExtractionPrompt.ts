@@ -26,6 +26,7 @@ OUTPUT SCHEMA:
     "quality_priority": "low" | "medium" | "high" | omit if unknown
   },
   "search_query": string,
+  "related_search_queries": string[] (0-2 semantically related shopping queries, omit or use [] if none),
   "raw_intent_summary": string,
   "confidence_score": number,
   "clarification_needed": boolean,
@@ -41,6 +42,16 @@ search_query:
 - Do NOT embed price ranges (e.g. "under $150") — price filtering is handled separately
 - Include brand, category, key attributes derived from ALL accumulated hard_constraints and soft_preferences
 - Good: "minimalist everyday jacket" | Bad: "jacket under $150"
+
+related_search_queries:
+- Optional array of 0-2 alternative shopping queries
+- These should be semantically adjacent to the main search, not broad category jumps
+- Use them to broaden recall when the exact wording may miss products
+- Examples:
+  - "blue shoes" -> ["blue sneakers", "teal sneakers"]
+  - "minimalist jacket" -> ["clean utility jacket", "lightweight everyday jacket"]
+- Do NOT repeat the exact search_query
+- Do NOT make them overly broad
 
 raw_intent_summary:
 - One sentence, third person: "User wants X for Y purpose"
@@ -114,7 +125,7 @@ Adapt clarification_question style to match user_expertise:
 HISTORY AWARENESS (CRITICAL):
 Use the full conversation history on every turn. Carry forward all constraints already established.
 Resolve references like "cheaper ones", "that brand", "make it wireless", "in blue instead".
-Never ask a question that was already answered in the conversation.
+Never ask a question that was already answered in the conversation history.
 If the user provides more detail in a follow-up, update confidence_score accordingly.
 
 PIVOT DETECTION RULE:
@@ -136,9 +147,12 @@ When is_pivot: true:
 - Reset must_have_attributes to empty unless explicitly stated in the new message
 - Set confidence_score based only on the new message, ignoring prior context
 - The search_query must reflect ONLY the new intent
+- related_search_queries should also reflect ONLY the new intent
 
 When is_pivot: false:
 - Apply the ACCUMULATION RULE as normal
+- search_query should reflect all accumulated constraints
+- related_search_queries should be close alternatives to the accumulated search intent
 
 Pivot examples (learn the pattern):
 - Prior: "headphones", New: "blue dress" → is_pivot: true (electronics → clothing)
@@ -155,7 +169,7 @@ Examples of correct accumulation:
 - Turn 2: "under $150" → hard_constraints must still include "merino wool" AND now budget_ceiling: 150
 - Turn 3: "in navy" → must_have_attributes: ["merino wool", "navy"], budget_ceiling: 150 still present
 
-Never reset hard_constraints or soft_preferences to empty on a new turn. Only update or add fields. The search_query must reflect ALL accumulated constraints, not just the latest message.
+Never reset hard_constraints or soft_preferences to empty on a new turn. Only update or add fields. The search_query must reflect ALL accumulated constraints, not just the latest message. related_search_queries should be close semantic expansions of that same accumulated intent.
 
 EXAMPLES:
 
@@ -167,27 +181,33 @@ User: "white Nike running shoes under $120"
 → is_pivot: false, confidence_score: 0.9, clarification_needed: false, user_expertise: "intermediate"
 → hard_constraints: { category: "running shoes", budget_ceiling: 120, must_have_attributes: ["Nike", "white"] }
 → search_query: "Nike white running shoes"
+→ related_search_queries: ["white running sneakers", "Nike training shoes"]
 
 User: "something cozy for winter"
 → is_pivot: false, confidence_score: 0.6, clarification_needed: false, user_expertise: "novice"
 → soft_preferences: { occasion: "winter", vibe_keywords: ["cozy", "warm", "comfortable"] }
 → search_query: "cozy winter clothing"
+→ related_search_queries: ["warm winter outfit", "comfortable winter wear"]
 
 User: "merino wool crewneck, prefer natural fiber"
 → is_pivot: false, confidence_score: 0.8, clarification_needed: false, user_expertise: "expert"
 → hard_constraints: { category: "sweater", must_have_attributes: ["merino wool"] }
 → soft_preferences: { quality_priority: "high" }
 → search_query: "merino wool crewneck sweater natural fiber"
+→ related_search_queries: ["merino wool pullover sweater", "natural fiber crewneck sweater"]
 
 User: "full-frame mirrorless under $2k"
 → is_pivot: false, confidence_score: 0.85, clarification_needed: false, user_expertise: "expert"
 → hard_constraints: { category: "mirrorless camera", budget_ceiling: 2000 }
 → search_query: "full-frame mirrorless camera"
+→ related_search_queries: ["full frame interchangeable lens camera", "mirrorless digital camera"]
 
 Prior turn: "I want headphones", New message: "blue dress"
 → is_pivot: true, hard_constraints reset to { category: "dress", must_have_attributes: ["blue"] }
 → search_query: "blue dress"
+→ related_search_queries: ["navy dress", "teal dress"]
 
 Prior turn: "blue dress under $100", New message: "make it midi length"
 → is_pivot: false, must_have_attributes: ["blue", "midi length"], budget_ceiling: 100 retained
-→ search_query: "midi length blue dress"`;
+→ search_query: "midi length blue dress"
+→ related_search_queries: ["blue midi dress", "mid length dress blue"]`;
