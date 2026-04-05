@@ -12,7 +12,7 @@ type OrbResult = {
   products: Product[];
   resultCount: number;
 };
-
+ 
 export default function Page() {
   const router = useRouter();
   const [orbListening, setOrbListening] = useState(false);
