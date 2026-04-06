@@ -1,6 +1,6 @@
 # Pine — Product Roadmap
 
-_Last updated: 2026-04-02 (auto-routing + mic tuning session)_
+_Last updated: 2026-04-05 (affiliate URL resolution, adjacent queries, local STT)_
 
 ---
 
@@ -59,10 +59,18 @@ The goal is to upgrade Pine from Level 3.5 (single intent extraction call + Serp
 - [ ] K4: Review signal extraction → `{ quality_signal, fit_signal, value_signal, avg_rating, review_count }`
 - [ ] K5: Enriched result object construction (combines K3+K4 into typed JSON per product)
 - [ ] K6: Sparse result flag when <3 viable products satisfy hard constraints
+- [x] K8: Direct retailer URL resolution — `resolveRetailerUrls()` via `serpapi_immersive_product_api` endpoint, seller priority picker, `affiliate_degraded` flag. Affiliate linking confirmed working.
+- [x] Adjacent search queries — `related_search_queries` field in intent schema + prompt, `buildSearchQueries()` + `callSerpAPIBatch()` in route, up to 3 parallel queries per turn.
+- [ ] K1: Structured query intake contract (agree schema with Daniel — Week 1 Day 1-2)
+- [ ] K2: Retailer scraping layer (Amazon + Target + 1 category-specific retailer)
+- [ ] K3: Product page fetch + structured data extraction (price, stock, specs, image, URL)
+- [ ] K4: Review signal extraction → `{ quality_signal, fit_signal, value_signal, avg_rating, review_count }`
+- [ ] K5: Enriched result object construction (combines K3+K4 into typed JSON per product)
+- [ ] K6: Sparse result flag when <3 viable products satisfy hard constraints
 - [ ] K7: SerpAPI silent fallback when scraping returns zero results or fails
 
 ### Eric — Voice + UI
-- [x] E1: Voice input — MediaRecorder + VAD wired in `orb.jsx`; transcription via Python FastAPI backend (ngrok). Transcript feeds `useConvo.ts`. Auto-routing complete: successful voice search stores results in localStorage (`orbData`) and navigates to `/conversation`; zero-result turns loop back to listening on landing.
+- [x] E1: Voice input — `orb.jsx` now uses browser `SpeechRecognition` API (no ngrok dependency). Original MediaRecorder/Python pipeline preserved in commented blocks for future Data Agent integration. Auto-routing complete: successful voice search stores results in localStorage (`orbData`) and navigates to `/conversation`; zero-result turns loop back to listening on landing.
 - [ ] E2: Orb UI state machine — idle / listening / processing implemented. `responding` state (during TTS playback) still missing.
 - [x] E3: Voice output via Web Speech Synthesis API — implemented in `useConvo.ts`; Pine speaks `chatResponse` after each turn
 - [x] E4: Result cards with intent-match explanation display (3 cards max, retailer logo link) — `ProductCard.jsx` + `ProductGrid.jsx` live in `/conversation`; D6 explanation slot stubbed with TODO
@@ -152,6 +160,9 @@ The long-term product vision is payment completing on Pine with direct retailer 
 | 2026-04-02 | VAD threshold tuning — silence detection tightened | SILENCE_THRESHOLD raised 0.015→0.025 (matches SPEECH_THRESHOLD at 0.025), SILENCE_DURATION_MS reduced 1200→500ms. Result: faster auto-stop after speech ends, less missed audio from background noise crossing old threshold. |
 | 2026-03-31 | Intent pivot detection added to schema and prompt | `is_pivot: boolean` added to `IntentExtractionResult`. On pivot, both `accumulatedIntent` and conversation history reset to only the current turn. Prevents prior category attributes from contaminating unrelated searches. Pivot examples embedded in prompt so model can learn the pattern. |
 | 2026-03-31 | Price filter fallback added to route | When budget/attribute filters eliminate all results, `route.ts` returns unfiltered products with an explanatory message rather than an empty grid. Zero-result SerpAPI responses now surface a user-visible message instead of a blank state. |
+| 2026-04-05 | Affiliate URL resolution via `serpapi_immersive_product_api` | SerpAPI Shopping results include a pre-built URL for the immersive product endpoint. `resolveRetailerUrls()` calls it per-product in parallel (with api_key appended — not included by default), reads `product_results.stores`, picks best seller by priority order. `sellers_results.online_sellers` path (from google_product engine) was wrong — correct path is `product_results.stores` on google_immersive_product. Affiliate linking confirmed working. |
+| 2026-04-05 | Adjacent search queries added to intent schema | `related_search_queries: string[]` (0–2 entries) added to `IntentExtractionResult` and prompt. Route builds up to 3 total queries (`search_query` + related), runs `callSerpAPIBatch()` in parallel, merges and deduplicates results. Improves recall when exact phrasing misses products. Related queries must be semantically adjacent — not broad category jumps. |
+| 2026-04-05 | Orb STT switched from MediaRecorder + Python/ngrok to browser SpeechRecognition | Eliminates ngrok dependency for local dev and demo reliability. MediaRecorder/VAD/Python pipeline preserved in commented blocks in `orb.jsx` with `[KEVIN - Whisper pipeline]` markers for future Data Agent integration. Trade-off: browser STT varies by browser/OS; Whisper gives more control over audio format and VAD tuning. |
 
 ---
 

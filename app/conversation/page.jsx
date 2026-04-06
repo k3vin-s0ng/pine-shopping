@@ -7,6 +7,7 @@ import LeftPanel from "../components/conversation/LeftPanel";
 import ProductGrid from "../components/conversation/ProductGrid";
 import BottomBar from "../components/conversation/BottomBar";
 import { useVoiceRecorder } from "../lib/useVoiceRecorder";
+import { speakWithInworld } from "../lib/tts/inworldTTS";
 
 function ConversationView() {
   const searchParams = useSearchParams();
@@ -27,38 +28,14 @@ function ConversationView() {
   // Client-side merge mirrors mergeIntent() in intentExtraction.ts (server-only, not importable here)
   const [accumulatedIntent, setAccumulatedIntent] = useState({});
 
-  // Returns a Promise that resolves after TTS finishes (or immediately if unavailable)
-  function speak(text) {
-    return new Promise((resolve) => {
-      if (!text || typeof window === "undefined" || !window.speechSynthesis) {
-        resolve();
-        return;
-      }
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.05;
-      utterance.pitch = 1;
-
-      // Same voice preference as useConvo.ts
-      const applyVoice = () => {
-        const voices = window.speechSynthesis.getVoices();
-        const preferred =
-          voices.find(
-            (v) => v.lang === "en-US" && /samantha|google us english|zira/i.test(v.name)
-          ) ?? voices.find((v) => v.lang.startsWith("en"));
-        if (preferred) utterance.voice = preferred;
-      };
-      applyVoice();
-      // Voices list may be empty on first call — retry when loaded
-      if (window.speechSynthesis.getVoices().length === 0) {
-        window.speechSynthesis.addEventListener("voiceschanged", applyVoice, { once: true });
-      }
-
-      utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => { setIsSpeaking(false); resolve(); };
-      utterance.onerror = () => { setIsSpeaking(false); resolve(); };
-      window.speechSynthesis.speak(utterance);
-    });
+  async function speak(text) {
+    if (!text) return;
+    setIsSpeaking(true);
+    try {
+      await speakWithInworld(text);
+    } finally {
+      setIsSpeaking(false);
+    }
   }
 
   // Returns { chatResponse } so voice wrapper can speak the reply.

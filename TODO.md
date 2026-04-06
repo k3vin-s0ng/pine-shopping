@@ -1,6 +1,6 @@
 # Pine — Active Task Board
 
-_Updated: 2026-04-02 (auto-routing + mic tuning session) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
+_Updated: 2026-04-05 (affiliate URL resolution, adjacent queries, local STT) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
 
 ---
 
@@ -10,7 +10,7 @@ _Updated: 2026-04-02 (auto-routing + mic tuning session) | Owner tags: [D] = Dan
 |---|---|---|---|
 | B-05 | TypeScript dropped for JSX in component layer | [K]/[D] | All new components are `.jsx` with no type annotations. This breaks the TypeScript-strict convention in CLAUDE.md and loses type safety on the conversation history, intent extraction output, and product card props. Decision needed: migrate new components to TSX or accept JSX for UI layer. |
 | B-02 | Daniel↔Kevin Data Agent handoff contract | [D]/[K] | Schema defined in CLAUDE.md. Needs explicit agreement from Kevin before K2+ and D5+ can be built. Priority: next team meeting. |
-| B-03 | Direct retailer URL resolution strategy | [K] | SerpAPI Google Shopping returns google.com/shopping URLs — not retailer URLs. Affiliate links (Skimlinks, Amazon Associates) require direct retailer URLs to generate commissions. Kevin must resolve this before affiliate monetization works. See K8 for resolution options. Daniel's Reasoning Agent is unaffected — it stays on SerpAPI for search; Kevin's Data Agent is responsible for returning valid `url` in enriched result objects. |
+| ~~B-03~~ | ~~Direct retailer URL resolution strategy~~ | ~~[K]~~ | **✅ Resolved 2026-04-05.** `resolveRetailerUrls()` implemented in `route.ts` — uses `serpapi_immersive_product_api` field from each shopping result to call the immersive product endpoint, extracts `product_results.stores`, picks best seller (Amazon → Target → Walmart → Best Buy → Nordstrom → first available), replaces `product_link` with direct retailer URL. `affiliate_degraded: true` flagged on failures. Affiliate linking confirmed working. |
 
 ---
 
@@ -20,6 +20,7 @@ _Updated: 2026-04-02 (auto-routing + mic tuning session) | Owner tags: [D] = Dan
 |---|---|---|---|
 | I-02 | Competitive research (Google Shopping AI, Perplexity Shopping, etc.) | [D]/[E] | Needed before PRD |
 | E2 | Orb UI state machine | [K] | 3 of 4 states implemented: `idle`, `listening`, `processing`. CSS classes wired. `responding` state (while TTS plays) still missing. |
+| K-voice | Whisper/ngrok STT pipeline restoration | [K] | MediaRecorder + Python transcription backend replaced by browser `SpeechRecognition` API in `orb.jsx` (`1bf8fa0`). Original MediaRecorder/ngrok code preserved in commented blocks with `[KEVIN - Whisper pipeline: restore for Data Agent integration]` markers. Decision on which to use long-term is open. |
 
 ---
 
@@ -30,7 +31,7 @@ _Updated: 2026-04-02 (auto-routing + mic tuning session) | Owner tags: [D] = Dan
 | # | Task | Owner | Notes |
 |---|---|---|---|
 | K1 | Data Agent: structured query intake contract | [K] | Accept typed query object from Reasoning Agent. Schema in CLAUDE.md. Agree with Daniel before building. |
-| K8 | Direct retailer URL resolution | [K] | **Blocks affiliate monetization.** Kevin to choose and implement one of: (1) SerpAPI Product Results endpoint — takes Google Shopping product ID, returns merchant seller links with direct retailer URLs; extra call per product but keeps SerpAPI as fallback. (2) Amazon Product Advertising API — returns direct Amazon URLs natively, designed for Associates program. (3) Direct scraping — Kevin's Data Agent scrapes retailer pages directly, URL is the page URL. All three valid; Kevin decides based on reliability and rate limits. Enriched result object `url` field MUST be a direct retailer URL — never a google.com/shopping URL. |
+| ~~K8~~ | ~~Direct retailer URL resolution~~ | ~~[K]~~ | **✅ Resolved 2026-04-05** — see B-03. |
 | K2 | Retailer scraping layer | [K] | Adapt existing scraping agent. Start with Amazon + Target + 1 category retailer. Narrow and reliable beats broad and flaky. |
 | E2 | Orb UI state machine | [K]/[E] | → Moved to 🟡 In Progress. `responding` state still needed. |
 
@@ -144,6 +145,7 @@ _Updated: 2026-04-02 (auto-routing + mic tuning session) | Owner tags: [D] = Dan
 | ✓ | D3: Preference accumulator implemented — `accumulatedIntent` state merges `hard_constraints` and `soft_preferences` forward across turns without dropping prior constraints. `mergeIntent()` exported from `intentExtraction.ts` (server-side reference). Client-side merge duplicated in `page.jsx`. `accumulatedIntent` sent to API on every call; clears on Restart. | 2026-03-30 |
 | ✓ | D3: ACCUMULATION RULE added to prompt — model instructed to carry all prior constraints forward in each turn's output. Refinement-turn confidence floor (≥0.7 when category + ≥1 constraint established) added. B-06 and B-07 resolved. | 2026-03-30 |
 | ✓ | D4: `user_expertise` field added to `IntentExtractionResult` — "novice" / "intermediate" / "expert" derived from vocabulary. USER EXPERTISE CLASSIFICATION section added to prompt with per-level clarification question style rules. | 2026-03-30 |
+| ✓ | Confidence scoring overhaul — replaced vague bucket-based self-assessment with deterministic additive rubric (5 slots: Category 30, Specificity 25, Price 20, Attributes 15, Context 10). Specificity bonus ×1.1 when brand/exact price/precise sub-type present. Refinement turn bonus +20. Expertise-adjusted thresholds: novice 0.55, default 0.50, expert 0.40. Clarification question targeting: highest-weight zero-point slot only. Prompt-only change — no schema or route changes. | 2026-04-05 |
 | ✓ | API route now returns `intent` object on all response paths (clarification, search, SerpAPI error) — consumed by client-side accumulator. Accepts `accumulatedIntent` from frontend for D5 utility scoring (logged for now). | 2026-03-30 |
 | ✓ | Landing page UI updated to match Eric's HTML — `hero.jsx`, `inputbar.jsx`, `curated.jsx`, `globals.css` restyled | 2026-03-30 |
 | ✓ | Logo updated — `public/logo.png` + `favicon.ico` replaced; old logo archived as `public/old_logo.png` | 2026-03-30 |
@@ -156,6 +158,10 @@ _Updated: 2026-04-02 (auto-routing + mic tuning session) | Owner tags: [D] = Dan
 | ✓ | E1: Voice input auto-routing complete — orb accepts `onComplete` prop; when voice search returns products, `page.tsx` stores results in localStorage as `orbData` and routes to `/conversation`. Conversation page reads `orbData` on mount and pre-populates product grid (skips redundant API call). Zero-result loop (clarification) keeps user on landing and re-enters listening state. | 2026-04-02 |
 | ✓ | Mic VAD threshold tuning — SPEECH_THRESHOLD 0.03→0.025, SILENCE_THRESHOLD 0.015→0.025, SILENCE_DURATION_MS 1200ms→500ms. State order fix: `setListening(false)` now fires before `cleanupRecording()` in the silence timeout path. | 2026-04-02 |
 | ✓ | `useConvo.ts` now passes `products: Product[]` in `onAssistantFinished` callback alongside `resultCount` — enables orb to forward result data to the routing handler without a second API call. | 2026-04-02 |
+| ✓ | B-03 / K8: Direct retailer URL resolution — `resolveRetailerUrls()` in `route.ts` uses `serpapi_immersive_product_api` field to call SerpAPI immersive product endpoint, reads `product_results.stores`, picks best seller by priority (Amazon > Target > Walmart > Best Buy > Nordstrom > first). Replaces `product_link` with direct URL. `affiliate_degraded: true` on fallback. Affiliate linking confirmed working. | 2026-04-05 |
+| ✓ | Adjacent search queries — Kevin added `related_search_queries` field to `IntentExtractionResult` and prompt. `buildSearchQueries()` in `route.ts` combines `search_query` + up to 2 related queries, deduplicates, runs all in parallel via `callSerpAPIBatch()`. `SEARCH_VARIANT_COUNT=3`, `RESULTS_PER_QUERY=10`. Improves recall for edge wordings. | 2026-04-05 |
+| ✓ | Orb STT switched from MediaRecorder + Python/ngrok to browser `SpeechRecognition` API — eliminates ngrok dependency for local dev. Original Whisper pipeline preserved in commented blocks in `orb.jsx` for Kevin's Data Agent integration phase. | 2026-04-05 |
+| ✓ | Discover page restored (`app/discover/page.jsx`) — deleted in 314a790, recovered. 4 curated sections fetching in parallel, skeleton loading, "Talk to Pine →" CTA. Header nav link re-pointed to `/discover`. | 2026-04-05 |
 
 ---
 

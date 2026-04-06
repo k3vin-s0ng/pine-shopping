@@ -5,6 +5,7 @@
 import { useRef, useState, useCallback } from "react";
 import { searchProducts, ConversationTurn } from "./serpapi";
 import { Product } from "./products";
+import { speakWithInworld } from "./tts/inworldTTS";
 
 interface HistoryMessage {
   role: "user" | "ai";
@@ -33,38 +34,13 @@ export function useConvo(): UseConvoReturn {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const historyRef = useRef<HistoryMessage[]>([]);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-
   const speak = useCallback((text: string, onEnd?: () => void): void => {
     if (!text) return;
-
-    window.speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utteranceRef.current = utterance;
-
-    utterance.rate = 1.05;
-    utterance.pitch = 1;
-
-    const voices = window.speechSynthesis.getVoices();
-    const preferred =
-      voices.find(
-        (v) =>
-          v.lang === "en-US" &&
-          /samantha|google us english|zira/i.test(v.name)
-      ) ??
-      voices.find((v) => v.lang.startsWith("en"));
-
-    if (preferred) utterance.voice = preferred;
-
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => {
+    setIsSpeaking(true);
+    speakWithInworld(text).finally(() => {
       setIsSpeaking(false);
       onEnd?.();
-    };
-    utterance.onerror = () => setIsSpeaking(false);
-
-    window.speechSynthesis.speak(utterance);
+    });
   }, []);
 
   const stopSpeaking = useCallback((): void => {

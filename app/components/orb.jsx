@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { speakWithInworld } from "../lib/tts/inworldTTS";
 
 // [KEVIN - Whisper pipeline: restore for Data Agent integration]
 // The constants below were used by the MediaRecorder/ngrok STT pipeline.
@@ -116,35 +117,6 @@ export default function Orb({ onComplete: _onComplete, onInterimTranscript, onLi
   //   if (data.transcript) { await handleTurn(data.transcript); }
   // };
 
-  // TTS — same voice preference as speak() in app/conversation/page.jsx
-  function speak(text) {
-    return new Promise((resolve) => {
-      if (!text || typeof window === "undefined" || !window.speechSynthesis) {
-        resolve();
-        return;
-      }
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.05;
-      utterance.pitch = 1;
-      const applyVoice = () => {
-        const voices = window.speechSynthesis.getVoices();
-        const preferred =
-          voices.find(
-            (v) => v.lang === "en-US" && /samantha|google us english|zira/i.test(v.name)
-          ) ?? voices.find((v) => v.lang.startsWith("en"));
-        if (preferred) utterance.voice = preferred;
-      };
-      applyVoice();
-      if (window.speechSynthesis.getVoices().length === 0) {
-        window.speechSynthesis.addEventListener("voiceschanged", applyVoice, { once: true });
-      }
-      utterance.onend = () => resolve();
-      utterance.onerror = () => resolve();
-      window.speechSynthesis.speak(utterance);
-    });
-  }
-
   async function handleTurn(transcript) {
     setProcessing(true);
     try {
@@ -197,13 +169,13 @@ export default function Orb({ onComplete: _onComplete, onInterimTranscript, onLi
 
       if (data.clarificationNeeded) {
         // Speak the clarification question, then restart listening
-        await speak(data.chatResponse);
+        await speakWithInworld(data.chatResponse);
         setProcessing(false);
         if (activeRef.current) startSession();
       } else {
         // Speak confirmation before handing off, then route
         const confirmation = data.chatResponse || `Let me look for ${transcript}.`;
-        await speak(confirmation);
+        await speakWithInworld(confirmation);
         localStorage.setItem("pineHandoff", JSON.stringify({
           history: historyRef.current,
           accumulatedIntent: accumulatedIntentRef.current,

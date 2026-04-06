@@ -38,7 +38,7 @@ Daniel is the PM. When making architecture decisions, flag tradeoffs clearly so 
 
 ---
 
-## Architecture Overview (Current — Level 3.5)
+## Architecture Overview (Current — Level 3.5+)
 
 ```
 User Message
@@ -46,12 +46,17 @@ User Message
 Intent Extraction (LLM) ← MUST receive full conversation history
     ↓
 Search Query Builder
+    ├── search_query (primary)
+    └── related_search_queries[] (0–2 semantic variants from LLM)
     ↓
-SerpAPI (Google Shopping)
+SerpAPI Google Shopping (parallel batch — up to 3 queries)
     ↓
-Result Formatter
+resolveRetailerUrls() ← parallel per-product
+    └── serpapi_immersive_product_api → product_results.stores → best seller URL
     ↓
-Response + Product Cards rendered in React
+Result Formatter + Price/Attribute Filters
+    ↓
+Response + Product Cards with direct retailer URLs (affiliate-ready)
 ```
 
 ## Architecture Target (Level 4 — In Progress)
@@ -146,30 +151,36 @@ The intent extraction system **must** receive the full conversation history on e
 
 ---
 
-## Key UI Components (current state — 2026-03-29)
+## Key UI Components (current state — 2026-04-05)
 
 **Landing page components (all `.jsx`, Kevin's luxury design):**
-- Orb (`components/orb.jsx`) — visual orb, idle/listening CSS states. No Speech API yet (E1 pending).
+- Orb (`components/orb.jsx`) — voice input via browser `SpeechRecognition` API. VAD, TTS, full conversation loop, auto-routes to `/conversation` on successful search. MediaRecorder/ngrok pipeline preserved in commented blocks (`[KEVIN - Whisper pipeline]`) for Data Agent integration.
 - Input bar (`components/inputbar.jsx`) — navigates to `/conversation?q=…` on Enter or send. **Wired.**
 - Hero section (`components/hero.jsx`) — layout wrapper with orb stage.
-- Navbar (`components/header.jsx`) — fixed 58px nav, shared across landing and conversation.
+- Navbar (`components/header.jsx`) — fixed 58px nav, shared across landing, conversation, and discover.
 - Curated section (`components/curated.jsx`) — static placeholder, not a real result component.
+
+**Discover page (`app/discover/page.jsx`):**
+- 4 curated sections (Trending in Tech, Popular in Home, Top Picks in Style, Trending in Wellness) fetched in parallel via `Promise.all` against `/api/search`. Loading skeletons per section. "Talk to Pine →" CTA routes to `/`.
 
 **Conversation page (`app/conversation/page.jsx`) — fully wired to `/api/search`:**
 - `LeftPanel.jsx` — status dot, query echo (Cormorant italic), small orb, restart/stop controls, refine chips (auto-generated from result categories; clicking submits directly to API)
 - `ProductGrid.jsx` — 3 states: loading skeletons / clarification bubble (when `clarificationNeeded: true`) / 3-column product cards
-- `ProductCard.jsx` — image, rank badge, price badge, category, name, description, AI recommendation slot (D6 stub), "View at [retailer]" link
-- `BottomBar.jsx` — nav tabs (visual only), mic button (E1 stub), text input wired to `handleSubmit`
+- `ProductCard.jsx` — image, rank badge, price badge, category, name, description, AI recommendation slot (D6 stub), "View at [retailer]" link with **direct retailer URL** (affiliate-ready)
+- `BottomBar.jsx` — nav tabs (visual only), mic button, text input wired to `handleSubmit`
 
 **API route (`app/api/search/route.ts`):**
 - Returns `{ products, chatResponse, clarificationNeeded: boolean, intent }` — `clarificationNeeded` is explicit; `intent` is the full extraction result for client-side accumulation
 - Accepts `accumulatedIntent` from request body — logged for observability, will be consumed by D5
-- Price filtering applied post-SerpAPI against `hard_constraints.budget_ceiling` / `budget_floor`
+- Runs up to 3 parallel SerpAPI queries (`search_query` + `related_search_queries` from LLM) via `callSerpAPIBatch()`
+- `resolveRetailerUrls()` runs after shopping search — calls `serpapi_immersive_product_api` per product (parallel), reads `product_results.stores`, picks seller by priority (Amazon > Target > Walmart > Best Buy > Nordstrom). `affiliate_degraded: true` on fallback.
+- Price filtering applied post-resolution against `hard_constraints.budget_ceiling` / `budget_floor`
 - `must_have_attributes` filter applied if present
 
 **Prompt (`app/lib/prompts/intentExtractionPrompt.ts`):**
 - D1 + D2 + D3 + D4 implemented
 - `user_expertise: "novice" | "intermediate" | "expert"` — vocabulary-derived, drives clarification question style
+- `related_search_queries: string[]` (0–2) — semantically adjacent alternatives to `search_query`, used by route to broaden recall
 - ACCUMULATION RULE: model instructed to reproduce all prior constraints in every output
 - REFINEMENT TURN RULE: confidence floor ≥ 0.7 when category + ≥1 constraint already established
 - USER EXPERTISE CLASSIFICATION: per-level clarification tone (lifestyle / balanced / spec-framed)
@@ -201,7 +212,7 @@ Auth system (`authmodal.tsx`, `auth.tsx`) was deleted in Kevin's 2026-03-29 UI o
 ---
 
 ## Python Backend Services (Unintegrated)
-- `conversation/main.py` — Whisper transcription spike. Superseded by browser Speech Recognition API.
+- `conversation/main.py` — Whisper transcription spike. Currently superseded by browser `SpeechRecognition` API in `orb.jsx`. Original MediaRecorder/VAD code preserved in commented blocks in `orb.jsx` with `[KEVIN - Whisper pipeline: restore for Data Agent integration]` markers — Kevin may restore for production voice quality.
 - `evidence-finder/main.py` — FastAPI debate research service. Separate product. Do not touch.
 
 ---
