@@ -1,6 +1,6 @@
 # Pine — Product Roadmap
 
-_Last updated: 2026-04-05 (affiliate URL resolution, adjacent queries, local STT)_
+_Last updated: 2026-04-05 (affiliate URL resolution, adjacent queries, local STT, D6 explanation generation)_
 
 ---
 
@@ -48,7 +48,7 @@ The goal is to upgrade Pine from Level 3.5 (single intent extraction call + Serp
 - [x] D3: Multi-turn clarification loop — preference accumulator (`accumulatedIntent`) merges constraints across turns; ACCUMULATION RULE + refinement-turn confidence floor added to prompt
 - [x] D4: Dialog adaptation by user expertise level — `user_expertise` field + USER EXPERTISE CLASSIFICATION section in prompt; clarification question style adapts per level
 - [ ] D5: Personalized utility scoring against soft preference vector
-- [ ] D6: Intent-match explanation generation per top 3 results
+- [x] D6: Intent-match explanation generation per top 3 results
 - [ ] D7: Constraint relaxation logic when Data Agent returns sparse results
 - [ ] D8: Confident single recommendation mode (when top result significantly outscores others)
 
@@ -163,6 +163,7 @@ The long-term product vision is payment completing on Pine with direct retailer 
 | 2026-04-05 | Affiliate URL resolution via `serpapi_immersive_product_api` | SerpAPI Shopping results include a pre-built URL for the immersive product endpoint. `resolveRetailerUrls()` calls it per-product in parallel (with api_key appended — not included by default), reads `product_results.stores`, picks best seller by priority order. `sellers_results.online_sellers` path (from google_product engine) was wrong — correct path is `product_results.stores` on google_immersive_product. Affiliate linking confirmed working. |
 | 2026-04-05 | Adjacent search queries added to intent schema | `related_search_queries: string[]` (0–2 entries) added to `IntentExtractionResult` and prompt. Route builds up to 3 total queries (`search_query` + related), runs `callSerpAPIBatch()` in parallel, merges and deduplicates results. Improves recall when exact phrasing misses products. Related queries must be semantically adjacent — not broad category jumps. |
 | 2026-04-05 | Orb STT switched from MediaRecorder + Python/ngrok to browser SpeechRecognition | Eliminates ngrok dependency for local dev and demo reliability. MediaRecorder/VAD/Python pipeline preserved in commented blocks in `orb.jsx` with `[KEVIN - Whisper pipeline]` markers for future Data Agent integration. Trade-off: browser STT varies by browser/OS; Whisper gives more control over audio format and VAD tuning. |
+| 2026-04-05 | D6 scoped to SerpAPI-only explanation generation for demo | `generateExplanations` fires after `resolveRetailerUrls` with `raw_intent_summary` + product name + price only — no specs or review signals. Explanation quality will improve when Kevin's enriched result objects (review signals, specs) are available in Phase 4. D5 utility scoring deferred to Phase 4. Kevin's Data Agent deferred past Character Capital deadline. |
 
 ---
 

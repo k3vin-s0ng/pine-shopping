@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { OpenAI } from "openai";
 import { extractIntent } from "@/app/lib/intentExtraction";
 import { Product } from "@/app/lib/products";
 
 const SERP_API_KEY = process.env.SERP_API_KEY;
 const SEARCH_VARIANT_COUNT = 3;
 const RESULTS_PER_QUERY = 10;
+
+const openai = new OpenAI({
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
+
+const MODEL = "openai/gpt-4o-mini";
 
 interface OnlineSeller {
   name: string;
@@ -149,7 +157,69 @@ function transformProducts(items: any[]): Product[] {
     img: item.thumbnail || "",
     link: item.product_link || "",
     affiliate_degraded: item.affiliate_degraded ?? false,
+    explanation: item.explanation ?? undefined,
   }));
+}
+
+async function generateExplanations(
+  products: Product[],
+  intentSummary: string
+): Promise<Map<string, string>> {
+  try {
+    const top3 = products.slice(0, 3);
+    if (top3.length === 0) return new Map();
+
+    const productList = top3
+      .map((p, i) => `${i + 1}. ${p.name} — ${p.price}`)
+      .join("\n");
+
+    const prompt = `You are a shopping assistant. A user is looking for: "${intentSummary}"
+
+These are the top products found:
+${productList}
+
+Return ONLY a raw JSON object with an "explanations" array of exactly ${top3.length} objects, one per product in the same order:
+{ "explanations": [{ "name": string, "explanation": string }, ...] }
+
+Rules:
+- Each explanation must be ONE sentence, maximum 15 words
+- Be specific: reference a concrete detail from the product name that matches the user's intent
+- Do not invent attributes not present in the product name or the user's intent
+- Do not use generic praise like "a great choice" or "matches what you're looking for"
+- Good: "Fits your merino wool requirement and sits within your $150 ceiling."
+- Bad: "A great choice that matches what you're looking for."`;
+
+    const response = await openai.chat.completions.create({
+      model: MODEL,
+      temperature: 0.3,
+      response_format: { type: "json_object" },
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      console.warn("[D6] Empty explanation response");
+      return new Map();
+    }
+
+    const parsed = JSON.parse(content);
+    const explanations = parsed.explanations;
+    if (!Array.isArray(explanations)) {
+      console.warn("[D6] Malformed explanation response:", content);
+      return new Map();
+    }
+
+    const map = new Map<string, string>();
+    for (const entry of explanations) {
+      if (typeof entry.name === "string" && typeof entry.explanation === "string") {
+        map.set(entry.name, entry.explanation);
+      }
+    }
+    return map;
+  } catch (err) {
+    console.warn("[D6] generateExplanations failed — returning empty map:", err);
+    return new Map();
+  }
 }
 
 // POST: LLM intent extraction → expanded SerpAPI query set → filtered products
@@ -212,7 +282,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const resolvedItems = await resolveRetailerUrls(rawItems);
+  const resolvedItems = rawItems;
+  // resolveRetailerUrls temporarily disabled — re-enable before demo
+  // const resolvedItems = await resolveRetailerUrls(rawItems);
 
   const products = transformProducts(resolvedItems);
   const { budget_ceiling, budget_floor, must_have_attributes } = intent.hard_constraints;
@@ -247,6 +319,20 @@ export async function POST(request: NextRequest) {
   const chatResponse = !priceFilterApplied
     ? "I couldn't find exact matches within your constraints, but here are the closest options I found."
     : intent.chat_response || "Here are the best matches I found for you!";
+
+  // D6: Generate one-sentence explanations for top 3 products
+  if (filteredProducts.length > 0) {
+    const explanationMap = await generateExplanations(
+      filteredProducts.slice(0, 3),
+      intent.raw_intent_summary
+    );
+    if (explanationMap.size > 0) {
+      filteredProducts = filteredProducts.map((p, i) => ({
+        ...p,
+        explanation: i < 3 ? (explanationMap.get(p.name) ?? undefined) : undefined,
+      }));
+    }
+  }
 
   return NextResponse.json({
     products: filteredProducts,
