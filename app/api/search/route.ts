@@ -10,7 +10,7 @@ interface OnlineSeller {
   name: string;
   link: string;
   price?: string;
-  base_price?: number;
+  extracted_price?: number;
 }
 
 const PREFERRED_RETAILERS = [
@@ -41,10 +41,11 @@ async function resolveRetailerUrls(rawItems: any[]): Promise<any[]> {
       }
 
       try {
-        const response = await fetch(item.serpapi_immersive_product_api);
+        const urlWithKey = `${item.serpapi_immersive_product_api}&api_key=${SERP_API_KEY}`;
+        const response = await fetch(urlWithKey);
         const data = await response.json();
 
-        const sellers: OnlineSeller[] = data?.sellers_results?.online_sellers ?? [];
+        const sellers: OnlineSeller[] = data?.product_results?.stores ?? [];
         const best = pickBestSeller(sellers);
 
         if (!best) {
@@ -56,7 +57,7 @@ async function resolveRetailerUrls(rawItems: any[]): Promise<any[]> {
           product_link: best.link,
           source: best.name,
           ...(best.price !== undefined ? { price: best.price } : {}),
-          ...(best.base_price !== undefined ? { extracted_price: best.base_price } : {}),
+          ...(best.extracted_price !== undefined ? { extracted_price: best.extracted_price } : {}),
         };
       } catch {
         return { ...item, affiliate_degraded: true };
