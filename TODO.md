@@ -21,6 +21,7 @@ _Updated: 2026-04-05 (affiliate URL resolution, adjacent queries, local STT) | O
 | I-02 | Competitive research (Google Shopping AI, Perplexity Shopping, etc.) | [D]/[E] | Needed before PRD |
 | E2 | Orb UI state machine | [K] | 3 of 4 states implemented: `idle`, `listening`, `processing`. CSS classes wired. `responding` state (while TTS plays) still missing. |
 | K-voice | Whisper/ngrok STT pipeline restoration | [K] | MediaRecorder + Python transcription backend replaced by browser `SpeechRecognition` API in `orb.jsx` (`1bf8fa0`). Original MediaRecorder/ngrok code preserved in commented blocks with `[KEVIN - Whisper pipeline: restore for Data Agent integration]` markers. Decision on which to use long-term is open. |
+| D-voice-gap | Voice path missing accumulatedIntent | [D] | **Known gap:** `useConvo.ts` (voice path) does not pass `accumulatedIntent` to `/api/search` — only history is sent. Multi-turn constraint accumulation works correctly on `/conversation` (text path). Voice is a single-turn entry point so impact is minimal — fix when voice and text paths are unified into a single state manager. Do not fix in isolation before that unification. |
 
 ---
 
