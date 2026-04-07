@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "./components/header";
 import Hero from "./components/hero";
@@ -17,6 +17,14 @@ export default function Page() {
   const router = useRouter();
   const [orbListening, setOrbListening] = useState(false);
   const [orbInterimText, setOrbInterimText] = useState("");
+
+  // Clear any leftover conversation state from a previous session whenever the home page mounts.
+  // pineHandoff carries orb history into /conversation — stale if the user navigated back.
+  // orbData is written here but consumed nowhere; clear it to avoid accumulation.
+  useEffect(() => {
+    localStorage.removeItem("pineHandoff");
+    localStorage.removeItem("orbData");
+  }, []);
 
   const handleComplete = ({ products, resultCount }: OrbResult) => {
     localStorage.setItem("orbData", JSON.stringify({ products, resultCount }));
