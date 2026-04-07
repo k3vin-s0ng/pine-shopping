@@ -17,7 +17,7 @@ export default function Orb({ onComplete: _onComplete, onInterimTranscript, onLi
   const router = useRouter();
   const [listening, setListening] = useState(false);
   const [processing, setProcessing] = useState(false);
-
+  const [talking, setTalking] = useState(false);
   // Conversation state held in refs to avoid stale closures in async SpeechRecognition callbacks
   const historyRef = useRef([]);
   const accumulatedIntentRef = useRef({});
@@ -169,13 +169,17 @@ export default function Orb({ onComplete: _onComplete, onInterimTranscript, onLi
 
       if (data.clarificationNeeded) {
         // Speak the clarification question, then restart listening
+        setTalking(true);
         await speakWithInworld(data.chatResponse);
+        setTalking(false);
         setProcessing(false);
         if (activeRef.current) startSession();
       } else {
         // Speak confirmation before handing off, then route
         const confirmation = data.chatResponse || `Let me look for ${transcript}.`;
+        setTalking(true);
         await speakWithInworld(confirmation);
+        setTalking(false);
         localStorage.setItem("pineHandoff", JSON.stringify({
           history: historyRef.current,
           accumulatedIntent: accumulatedIntentRef.current,
