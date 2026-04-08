@@ -19,8 +19,7 @@ export default function Orb({ onComplete: _onComplete, onInterimTranscript, onLi
   const router = useRouter();
   const [listening, setListening] = useState(false);
   const [processing, setProcessing] = useState(false);
-  const [speaking, setSpeaking] = useState(false);
-
+  const [talking, setTalking] = useState(false);
   // Conversation state held in refs to avoid stale closures in async SpeechRecognition callbacks
   const historyRef = useRef([]);
   const accumulatedIntentRef = useRef({});
@@ -41,7 +40,7 @@ export default function Orb({ onComplete: _onComplete, onInterimTranscript, onLi
   // Three sine waves at different frequencies/phases simulate the irregular
   // cadence of speech rather than a metronomic CSS keyframe loop.
   useEffect(() => {
-    if (!speaking) {
+    if (!talking) {
       cancelAnimationFrame(rafRef.current);
       // Reset all inline styles so CSS takes back over
       if (halo1Ref.current) { halo1Ref.current.style.cssText = ""; }
@@ -125,7 +124,7 @@ export default function Orb({ onComplete: _onComplete, onInterimTranscript, onLi
 
     rafRef.current = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [speaking]);
+  }, [talking]);
 
   // [KEVIN - Whisper pipeline: restore for Data Agent integration]
   // The refs below were used by the MediaRecorder/ngrok STT pipeline.
@@ -273,10 +272,10 @@ export default function Orb({ onComplete: _onComplete, onInterimTranscript, onLi
         // Speak the clarification question, then restart listening
         onPineResponse?.(data.chatResponse);
         liveVolumeRef.current = 0;
-        setSpeaking(true);
+        setTalking(true);
         await speakWithInworld(data.chatResponse, undefined, (rms) => { liveVolumeRef.current = rms; });
         liveVolumeRef.current = 0;
-        setSpeaking(false);
+        setTalking(false);
         setProcessing(false);
         if (activeRef.current) startSession();
       } else {
@@ -284,10 +283,10 @@ export default function Orb({ onComplete: _onComplete, onInterimTranscript, onLi
         const confirmation = data.chatResponse || `Let me look for ${transcript}.`;
         onPineResponse?.(confirmation);
         liveVolumeRef.current = 0;
-        setSpeaking(true);
+        setTalking(true);
         await speakWithInworld(confirmation, undefined, (rms) => { liveVolumeRef.current = rms; });
         liveVolumeRef.current = 0;
-        setSpeaking(false);
+        setTalking(false);
         // Stop the recognition loop before navigating — prevents mic flash during the
         // Next.js route transition while activeRef is still true and rec.onend fires
         activeRef.current = false;
@@ -394,7 +393,7 @@ export default function Orb({ onComplete: _onComplete, onInterimTranscript, onLi
   };
 
   return (
-    <div className={`orb-wrap${speaking ? " speaking" : ""}`}>
+    <div className={`orb-wrap${talking ? " speaking" : ""}`}>
       <div ref={halo1Ref} className="orb-halo orb-halo-1"></div>
       <div ref={halo2Ref} className="orb-halo orb-halo-2"></div>
 
