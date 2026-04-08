@@ -7,7 +7,7 @@ const SERP_API_KEY = process.env.SERP_API_KEY;
 const SEARCH_VARIANT_COUNT = 3;
 const RESULTS_PER_QUERY = 10; // note: google_shopping engine ignores num — slice applied post-fetch
 const MAX_RESULTS_PER_QUERY = 10; // hard cap applied after fetch since SerpAPI ignores num
- 
+  
 const openai = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: process.env.OPENROUTER_API_KEY,
