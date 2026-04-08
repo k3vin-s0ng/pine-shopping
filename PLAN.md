@@ -1,6 +1,6 @@
 # Pine — Product Roadmap
 
-_Last updated: 2026-04-05 (affiliate URL resolution, adjacent queries, local STT, D6 explanation generation)_
+_Last updated: 2026-04-07 (Inworld TTS fix, orb speaking state, Pine response transcription on home page, session reset on nav)_
 
 ---
 
@@ -71,8 +71,8 @@ The goal is to upgrade Pine from Level 3.5 (single intent extraction call + Serp
 
 ### Eric — Voice + UI
 - [x] E1: Voice input — `orb.jsx` now uses browser `SpeechRecognition` API (no ngrok dependency). Original MediaRecorder/Python pipeline preserved in commented blocks for future Data Agent integration. Auto-routing complete: successful voice search stores results in localStorage (`orbData`) and navigates to `/conversation`; zero-result turns loop back to listening on landing.
-- [ ] E2: Orb UI state machine — idle / listening / processing implemented. `responding` state (during TTS playback) still missing.
-- [x] E3: Voice output via Web Speech Synthesis API — implemented in `useConvo.ts`; Pine speaks `chatResponse` after each turn
+- [x] E2: Orb UI state machine — idle / listening / processing / speaking all implemented. `speaking` state added to `orb.jsx` (`setSpeaking(true/false)` around `speakWithInworld`); `orb-wrap` gets `speaking` CSS class during TTS playback.
+- [x] E3: Voice output via Inworld TTS — `speakWithInworld` in `inworldTTS.ts` proxied through `/api/tts`. `INWORLD_TTS_API_KEY` env var fixed (was `NEXT_PUBLIC_INWORLD_API_KEY`). Falls back to Web Speech Synthesis on failure. `onStart` callback added to `speakWithInworld` — fires when `audio.play()` resolves (audio actually starts).
 - [x] E4: Result cards with intent-match explanation display (3 cards max, retailer logo link) — `ProductCard.jsx` + `ProductGrid.jsx` live in `/conversation`; D6 explanation slot stubbed with TODO
 - [x] E5: Typing fallback input (visually subordinate, functionally equal to voice) — `inputbar.jsx` navigates to `/conversation`, `BottomBar.jsx` submits follow-ups to API
 
@@ -163,6 +163,8 @@ The long-term product vision is payment completing on Pine with direct retailer 
 | 2026-04-05 | Affiliate URL resolution via `serpapi_immersive_product_api` | SerpAPI Shopping results include a pre-built URL for the immersive product endpoint. `resolveRetailerUrls()` calls it per-product in parallel (with api_key appended — not included by default), reads `product_results.stores`, picks best seller by priority order. `sellers_results.online_sellers` path (from google_product engine) was wrong — correct path is `product_results.stores` on google_immersive_product. Affiliate linking confirmed working. |
 | 2026-04-05 | Adjacent search queries added to intent schema | `related_search_queries: string[]` (0–2 entries) added to `IntentExtractionResult` and prompt. Route builds up to 3 total queries (`search_query` + related), runs `callSerpAPIBatch()` in parallel, merges and deduplicates results. Improves recall when exact phrasing misses products. Related queries must be semantically adjacent — not broad category jumps. |
 | 2026-04-05 | Orb STT switched from MediaRecorder + Python/ngrok to browser SpeechRecognition | Eliminates ngrok dependency for local dev and demo reliability. MediaRecorder/VAD/Python pipeline preserved in commented blocks in `orb.jsx` with `[KEVIN - Whisper pipeline]` markers for future Data Agent integration. Trade-off: browser STT varies by browser/OS; Whisper gives more control over audio format and VAD tuning. |
+| 2026-04-07 | Pine home page response display synced to actual audio start | `speakWithInworld` `onStart` callback fires when `audio.play()` resolves — guarantees text animation starts when audio begins, not on an arbitrary delay. Fallback (Web Speech Synthesis) does not animate text. |
+| 2026-04-07 | Session state fully resets on home page navigation | localStorage keys `pineHandoff` and `orbData` cleared on `page.tsx` mount. All React state resets on component unmount. No conversation context leaks across sessions. |
 | 2026-04-05 | D6 scoped to SerpAPI-only explanation generation for demo | `generateExplanations` fires after `resolveRetailerUrls` with `raw_intent_summary` + product name + price only — no specs or review signals. Explanation quality will improve when Kevin's enriched result objects (review signals, specs) are available in Phase 4. D5 utility scoring deferred to Phase 4. Kevin's Data Agent deferred past Character Capital deadline. |
 
 ---

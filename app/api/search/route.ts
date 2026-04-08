@@ -161,33 +161,24 @@ function transformProducts(items: any[]): Product[] {
   }));
 }
 
-async function generateExplanations(
-  products: Product[],
-  intentSummary: string
-): Promise<Map<string, string>> {
+// D6: Fires in parallel with callSerpAPIBatch — takes only the intent summary so it
+// can start before products are known. Returns 3 intent-framing sentences by position.
+async function generateExplanations(intentSummary: string): Promise<string[]> {
   try {
-    const top3 = products.slice(0, 3);
-    if (top3.length === 0) return new Map();
-
-    const productList = top3
-      .map((p, i) => `${i + 1}. ${p.name} — ${p.price}`)
-      .join("\n");
-
     const prompt = `You are a shopping assistant. A user is looking for: "${intentSummary}"
 
-These are the top products found:
-${productList}
+Generate exactly 3 short sentences explaining why search results match this intent. Each sentence should highlight a different aspect of the match (e.g. category fit, constraint match, quality signal).
 
-Return ONLY a raw JSON object with an "explanations" array of exactly ${top3.length} objects, one per product in the same order:
-{ "explanations": [{ "name": string, "explanation": string }, ...] }
+Return ONLY a raw JSON object:
+{ "explanations": [string, string, string] }
 
 Rules:
 - Each explanation must be ONE sentence, maximum 15 words
-- Be specific: reference a concrete detail from the product name that matches the user's intent
-- Do not invent attributes not present in the product name or the user's intent
+- Reference specific details from the intent summary — do not be generic
+- Do not mention specific product names or prices
 - Do not use generic praise like "a great choice" or "matches what you're looking for"
-- Good: "Fits your merino wool requirement and sits within your $150 ceiling."
-- Bad: "A great choice that matches what you're looking for."`;
+- Good: "Fits your merino wool requirement with natural fiber construction."
+- Bad: "This product is a great match for your needs."`;
 
     const response = await openai.chat.completions.create({
       model: MODEL,
@@ -199,26 +190,20 @@ Rules:
     const content = response.choices[0]?.message?.content;
     if (!content) {
       console.warn("[D6] Empty explanation response");
-      return new Map();
+      return [];
     }
 
     const parsed = JSON.parse(content);
     const explanations = parsed.explanations;
-    if (!Array.isArray(explanations)) {
+    if (!Array.isArray(explanations) || explanations.length === 0) {
       console.warn("[D6] Malformed explanation response:", content);
-      return new Map();
+      return [];
     }
 
-    const map = new Map<string, string>();
-    for (const entry of explanations) {
-      if (typeof entry.name === "string" && typeof entry.explanation === "string") {
-        map.set(entry.name, entry.explanation);
-      }
-    }
-    return map;
+    return explanations.filter((e): e is string => typeof e === "string").slice(0, 3);
   } catch (err) {
-    console.warn("[D6] generateExplanations failed — returning empty map:", err);
-    return new Map();
+    console.warn("[D6] generateExplanations failed — returning []:", err);
+    return [];
   }
 }
 
@@ -254,9 +239,14 @@ export async function POST(request: NextRequest) {
 
   console.log("[Search] Queries:", searchQueries);
 
+  // D6 fires in parallel with SerpAPI — uses only intent summary, no product names needed
   let rawItems: any[];
+  let explanations: string[];
   try {
-    rawItems = await callSerpAPIBatch(searchQueries);
+    [rawItems, explanations] = await Promise.all([
+      callSerpAPIBatch(searchQueries),
+      generateExplanations(intent.raw_intent_summary),
+    ]);
 
     if (rawItems.length === 0) {
       console.warn("[POST /api/search] SerpAPI returned 0 results for queries:", searchQueries);
@@ -320,18 +310,12 @@ export async function POST(request: NextRequest) {
     ? "I couldn't find exact matches within your constraints, but here are the closest options I found."
     : intent.chat_response || "Here are the best matches I found for you!";
 
-  // D6: Generate one-sentence explanations for top 3 products
-  if (filteredProducts.length > 0) {
-    const explanationMap = await generateExplanations(
-      filteredProducts.slice(0, 3),
-      intent.raw_intent_summary
-    );
-    if (explanationMap.size > 0) {
-      filteredProducts = filteredProducts.map((p, i) => ({
-        ...p,
-        explanation: i < 3 ? (explanationMap.get(p.name) ?? undefined) : undefined,
-      }));
-    }
+  // D6: Attach explanations by position to top 3 products
+  if (explanations.length > 0) {
+    filteredProducts = filteredProducts.map((p, i) => ({
+      ...p,
+      explanation: i < explanations.length ? explanations[i] : undefined,
+    }));
   }
 
   return NextResponse.json({

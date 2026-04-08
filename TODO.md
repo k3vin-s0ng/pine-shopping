@@ -1,6 +1,6 @@
 # Pine — Active Task Board
 
-_Updated: 2026-04-05 (affiliate URL resolution, adjacent queries, local STT) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
+_Updated: 2026-04-07 (Inworld TTS fix, orb speaking state, home page Pine response display, session reset) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
 
 ---
 
@@ -8,6 +8,7 @@ _Updated: 2026-04-05 (affiliate URL resolution, adjacent queries, local STT) | O
 
 | # | Task | Owner | Notes |
 |---|---|---|---|
+| ~~B-06~~ | ~~SerpAPI key invalid~~ | ~~[K]~~ | **✅ Resolved 2026-04-07.** Kevin generated a new key; Daniel updated `.env.local`. SerpAPI calls confirmed working. |
 | B-05 | TypeScript dropped for JSX in component layer | [K]/[D] | All new components are `.jsx` with no type annotations. This breaks the TypeScript-strict convention in CLAUDE.md and loses type safety on the conversation history, intent extraction output, and product card props. Decision needed: migrate new components to TSX or accept JSX for UI layer. |
 | B-02 | Daniel↔Kevin Data Agent handoff contract | [D]/[K] | Schema defined in CLAUDE.md. Needs explicit agreement from Kevin before K2+ and D5+ can be built. Priority: next team meeting. |
 | ~~B-03~~ | ~~Direct retailer URL resolution strategy~~ | ~~[K]~~ | **✅ Resolved 2026-04-05.** `resolveRetailerUrls()` implemented in `route.ts` — uses `serpapi_immersive_product_api` field from each shopping result to call the immersive product endpoint, extracts `product_results.stores`, picks best seller (Amazon → Target → Walmart → Best Buy → Nordstrom → first available), replaces `product_link` with direct retailer URL. `affiliate_degraded: true` flagged on failures. Affiliate linking confirmed working. |
@@ -146,6 +147,12 @@ _Updated: 2026-04-05 (affiliate URL resolution, adjacent queries, local STT) | O
 | ✓ | D3: Preference accumulator implemented — `accumulatedIntent` state merges `hard_constraints` and `soft_preferences` forward across turns without dropping prior constraints. `mergeIntent()` exported from `intentExtraction.ts` (server-side reference). Client-side merge duplicated in `page.jsx`. `accumulatedIntent` sent to API on every call; clears on Restart. | 2026-03-30 |
 | ✓ | D3: ACCUMULATION RULE added to prompt — model instructed to carry all prior constraints forward in each turn's output. Refinement-turn confidence floor (≥0.7 when category + ≥1 constraint established) added. B-06 and B-07 resolved. | 2026-03-30 |
 | ✓ | D4: `user_expertise` field added to `IntentExtractionResult` — "novice" / "intermediate" / "expert" derived from vocabulary. USER EXPERTISE CLASSIFICATION section added to prompt with per-level clarification question style rules. | 2026-03-30 |
+| ✓ | Inworld TTS env var fix — `NEXT_PUBLIC_INWORLD_API_KEY` renamed to `INWORLD_TTS_API_KEY` in `.env.local` to match what `/api/tts/route.ts` reads. Dev server restart required after change. | 2026-04-07 |
+| ✓ | Orb `speaking` state added — `setSpeaking(true/false)` wraps `speakWithInworld` calls in `orb.jsx`; `orb-wrap` receives `speaking` CSS class during TTS playback. Completes E2 orb state machine (idle / listening / processing / speaking). | 2026-04-07 |
+| ✓ | `speakWithInworld` `onStart` callback — fires when `audio.play()` resolves (audio actually begins). Used to sync home page text animation with real audio start rather than an arbitrary delay. | 2026-04-07 |
+| ✓ | Home page Pine response transcription — `hero.jsx` animates Pine's reply word-by-word (200ms/word) in the `.orb-cta` area, replacing "Just start talking to Pine". Subtitle held as `&nbsp;` during response to preserve layout. Animation triggered by `onPineResponse` callback wired through `Orb` → `hero.jsx`. Starts when Inworld audio begins via `onStart`. | 2026-04-07 |
+| ✓ | Session reset on home page mount — `useEffect` in `page.tsx` clears `pineHandoff` and `orbData` from localStorage when user returns to `/`. Prevents stale orb history from leaking into a fresh session if user navigated away before `/conversation` consumed it. | 2026-04-07 |
+| ✓ | ProductGrid passes `reason={product.explanation}` to `ProductCard` — D6 explanations now render in the AI Recommendation slot. | 2026-04-07 |
 | ✓ | D6: Intent-match explanation generation — `generateExplanations()` in `route.ts` fires a single gpt-4o-mini call after `resolveRetailerUrls` with `raw_intent_summary` + top-3 product names/prices. Returns `Map<name, explanation>` (1 sentence, ≤15 words, grounded in product name + intent). Mapped onto `filteredProducts[0–2]`; `[3+]` get `explanation: undefined`. Fails safe — error returns empty Map, products still returned. SerpAPI-only for now; explanation quality improves when Kevin's enriched result objects (review signals, specs) are available in Phase 4. `explanation?: string` added to `Product` type. | 2026-04-05 |
 | ✓ | Confidence scoring overhaul — replaced vague bucket-based self-assessment with deterministic additive rubric (5 slots: Category 30, Specificity 25, Price 20, Attributes 15, Context 10). Specificity bonus ×1.1 when brand/exact price/precise sub-type present. Refinement turn bonus +20. Expertise-adjusted thresholds: novice 0.55, default 0.50, expert 0.40. Clarification question targeting: highest-weight zero-point slot only. Prompt-only change — no schema or route changes. | 2026-04-05 |
 | ✓ | API route now returns `intent` object on all response paths (clarification, search, SerpAPI error) — consumed by client-side accumulator. Accepts `accumulatedIntent` from frontend for D5 utility scoring (logged for now). | 2026-03-30 |

@@ -98,7 +98,7 @@ export default function ProductGrid({ products = [], loading, chatResponse, clar
             key={product.link || i}
             product={product}
             rank={i + 1}
-            // TODO D6: pass `reason` from Reasoning Agent explanation generation
+            reason={product.explanation}
           />
         ))}
       </div>

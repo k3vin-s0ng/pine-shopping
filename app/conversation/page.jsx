@@ -175,10 +175,19 @@ function ConversationView() {
       localStorage.removeItem("pineHandoff");
       try {
         const parsed = JSON.parse(raw);
-        // Hydrate accumulatedIntent into state so subsequent turns inherit it.
-        // priorHistory and priorAccumulatedIntent are passed directly to handleSubmit
-        // because React state setters are async — the closure would see stale [] otherwise.
         const handoffIntent = parsed.accumulatedIntent || {};
+        // If the orb already fetched results, use them directly — no second API call needed
+        if (parsed.products && parsed.products.length > 0) {
+          setAccumulatedIntent(handoffIntent);
+          setHistory(parsed.history || []);
+          setProducts(parsed.products);
+          setChatResponse(parsed.chatResponse || "");
+          setQuery(parsed.lastQuery || "");
+          setStatus("Pine is listening");
+          setLoading(false);
+          return;
+        }
+        // Fallback: re-fetch if products weren't in handoff (e.g. older handoff format)
         setAccumulatedIntent(handoffIntent);
         handleSubmit(parsed.lastQuery, {
           priorHistory: parsed.history || [],

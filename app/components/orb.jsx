@@ -1,8 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { speakWithInworld } from "../lib/tts/inworldTTS";
+import { dotPulse } from "ldrs";
+if (typeof window !== "undefined") dotPulse.register();
 
 // [KEVIN - Whisper pipeline: restore for Data Agent integration]
 // The constants below were used by the MediaRecorder/ngrok STT pipeline.
@@ -13,10 +15,11 @@ import { speakWithInworld } from "../lib/tts/inworldTTS";
 // const SILENCE_THRESHOLD = 0.025;
 // const SILENCE_DURATION_MS = 500;
 
-export default function Orb({ onComplete: _onComplete, onInterimTranscript, onListeningChange }) {
+export default function Orb({ onComplete: _onComplete, onInterimTranscript, onListeningChange, onPineResponse, onProcessingStart, isProcessing }) {
   const router = useRouter();
   const [listening, setListening] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
 
   // Conversation state held in refs to avoid stale closures in async SpeechRecognition callbacks
   const historyRef = useRef([]);
@@ -25,6 +28,104 @@ export default function Orb({ onComplete: _onComplete, onInterimTranscript, onLi
   const recognitionRef = useRef(null);
   // true while the user has activated the orb and has not explicitly stopped
   const activeRef = useRef(false);
+
+  // Halo refs for rAF-driven speaking pulse
+  const halo1Ref = useRef(null);
+  const halo2Ref = useRef(null);
+  const orbElRef = useRef(null);
+  const rafRef = useRef(null);
+  // Live RMS volume from Web Audio API — updated by speakWithInworld's onVolume callback
+  const liveVolumeRef = useRef(0);
+
+  // Lerp-based speaking animation — mirrors orb-ui's rAF approach.
+  // Three sine waves at different frequencies/phases simulate the irregular
+  // cadence of speech rather than a metronomic CSS keyframe loop.
+  useEffect(() => {
+    if (!speaking) {
+      cancelAnimationFrame(rafRef.current);
+      // Reset all inline styles so CSS takes back over
+      if (halo1Ref.current) { halo1Ref.current.style.cssText = ""; }
+      if (halo2Ref.current) { halo2Ref.current.style.cssText = ""; }
+      if (orbElRef.current) { orbElRef.current.style.boxShadow = ""; }
+      return;
+    }
+
+    const start = performance.now();
+    // Current lerped values — start at resting state
+    let scale1 = 1, scale2 = 1, opacity1 = 0.65, opacity2 = 0.65, glowR = 20;
+    // Smoothed RMS — lerped separately so raw mic spikes don't jerk the halo
+    let smoothV = 0;
+
+    function frame(now) {
+      const t = (now - start) / 1000; // seconds
+
+      // Use live RMS from Web Audio API if available (> 0 means audio is playing and analysed).
+      // Fall back to synthetic sines when Web Audio is unavailable (e.g. SpeechSynthesis fallback).
+      const rms = liveVolumeRef.current;
+      let rawV;
+      if (rms > 0) {
+        rawV = Math.min(rms * 5.0, 1.0);
+      } else {
+        const vol =
+          0.55 * Math.sin(t * 10.0) +
+          0.28 * Math.sin(t * 17.0 + 1.1) +
+          0.17 * Math.sin(t * 27.0 + 2.4);
+        rawV = (vol + 1.0) / 2.0;
+      }
+      // Smooth the raw signal before it drives anything — asymmetric attack/release
+      // so the halo rises gently and decays slowly
+      smoothV += (rawV > smoothV ? 0.08 : 0.04) * (rawV - smoothV);
+      const v = smoothV;
+
+      const targetScale1  = 1.0  + v * 0.55;  // 1.00 → 1.55 — halos breathe dramatically
+      const targetScale2  = 1.02 + v * 0.38;  // 1.02 → 1.40 — lags behind halo1
+      const targetOpacity = v * 1.0;           // 0.00 → 1.00 — full range, nearly invisible at troughs
+      const targetGlow    = 8   + v * 140;     // 8px → 148px — enormous swing
+
+      scale1   += (targetScale1  - scale1)   * 0.06;
+      scale2   += (targetScale2  - scale2)   * 0.04;
+      opacity1 += (targetOpacity - opacity1) * 0.06;
+      opacity2 += (targetOpacity - opacity2) * 0.04;
+      glowR    += (targetGlow    - glowR)    * 0.05;
+
+      // Deep dark green — reads as a dark aura against light backgrounds
+      const a1   = (v * 0.92).toFixed(3);            // 0.00 → 0.92
+      const a2   = (v * 0.78).toFixed(3);            // 0.00 → 0.78
+      const aMid = (v * 0.55).toFixed(3);
+      const brightness = (0.02 + v * 0.38).toFixed(3); // 0.02 → 0.40 — stays genuinely dark
+      const saturate   = (1.0  + v * 5.0).toFixed(3);  // 1.0  → 6.0
+
+      if (halo1Ref.current) {
+        halo1Ref.current.style.animation  = "none";
+        halo1Ref.current.style.transform  = `scale(${scale1.toFixed(4)})`;
+        halo1Ref.current.style.opacity    = opacity1.toFixed(4);
+        halo1Ref.current.style.background = `radial-gradient(circle, rgba(4,28,12,${a1}) 0%, rgba(6,40,18,${aMid}) 45%, transparent 72%)`;
+        halo1Ref.current.style.filter     = `brightness(${brightness}) saturate(${saturate})`;
+      }
+      if (halo2Ref.current) {
+        halo2Ref.current.style.animation  = "none";
+        halo2Ref.current.style.transform  = `scale(${scale2.toFixed(4)})`;
+        halo2Ref.current.style.opacity    = opacity2.toFixed(4);
+        halo2Ref.current.style.background = `radial-gradient(circle, rgba(4,28,12,${a2}) 0%, transparent 65%)`;
+        halo2Ref.current.style.filter     = `brightness(${brightness}) saturate(${saturate})`;
+      }
+      if (orbElRef.current) {
+        const g = glowR.toFixed(1);
+        orbElRef.current.style.boxShadow = [
+          "0 2px 0 rgba(255,255,255,.14) inset",
+          "0 -6px 16px rgba(0,0,0,.22) inset",
+          `0 28px 80px rgba(21,43,30,.55)`,
+          `0 0 ${g}px rgba(45,97,71,${(v * 1.0).toFixed(3)})`,
+          `0 0 0 ${(0.5 + v * 4).toFixed(2)}px rgba(45,97,71,${(v * 1.0).toFixed(3)})`,
+        ].join(", ");
+      }
+
+      rafRef.current = requestAnimationFrame(frame);
+    }
+
+    rafRef.current = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [speaking]);
 
   // [KEVIN - Whisper pipeline: restore for Data Agent integration]
   // The refs below were used by the MediaRecorder/ngrok STT pipeline.
@@ -119,6 +220,7 @@ export default function Orb({ onComplete: _onComplete, onInterimTranscript, onLi
 
   async function handleTurn(transcript) {
     setProcessing(true);
+    onProcessingStart?.();
     try {
       const res = await fetch("/api/search", {
         method: "POST",
@@ -169,17 +271,36 @@ export default function Orb({ onComplete: _onComplete, onInterimTranscript, onLi
 
       if (data.clarificationNeeded) {
         // Speak the clarification question, then restart listening
-        await speakWithInworld(data.chatResponse);
+        onPineResponse?.(data.chatResponse);
+        liveVolumeRef.current = 0;
+        setSpeaking(true);
+        await speakWithInworld(data.chatResponse, undefined, (rms) => { liveVolumeRef.current = rms; });
+        liveVolumeRef.current = 0;
+        setSpeaking(false);
         setProcessing(false);
         if (activeRef.current) startSession();
       } else {
         // Speak confirmation before handing off, then route
         const confirmation = data.chatResponse || `Let me look for ${transcript}.`;
-        await speakWithInworld(confirmation);
+        onPineResponse?.(confirmation);
+        liveVolumeRef.current = 0;
+        setSpeaking(true);
+        await speakWithInworld(confirmation, undefined, (rms) => { liveVolumeRef.current = rms; });
+        liveVolumeRef.current = 0;
+        setSpeaking(false);
+        // Stop the recognition loop before navigating — prevents mic flash during the
+        // Next.js route transition while activeRef is still true and rec.onend fires
+        activeRef.current = false;
+        if (recognitionRef.current) {
+          recognitionRef.current.abort();
+          recognitionRef.current = null;
+        }
         localStorage.setItem("pineHandoff", JSON.stringify({
           history: historyRef.current,
           accumulatedIntent: accumulatedIntentRef.current,
           lastQuery: transcript,
+          products: data.products || [],
+          chatResponse: confirmation,
         }));
         router.push("/conversation");
       }
@@ -273,20 +394,28 @@ export default function Orb({ onComplete: _onComplete, onInterimTranscript, onLi
   };
 
   return (
-    <div className="orb-wrap">
-      <div className="orb-halo orb-halo-1"></div>
-      <div className="orb-halo orb-halo-2"></div>
+    <div className={`orb-wrap${speaking ? " speaking" : ""}`}>
+      <div ref={halo1Ref} className="orb-halo orb-halo-1"></div>
+      <div ref={halo2Ref} className="orb-halo orb-halo-2"></div>
 
       <div
+        ref={orbElRef}
         className={`orb ${listening ? "listening" : ""} ${processing ? "processing" : ""}`}
         onClick={toggle}
       >
-        <div className="waveform">
-          {[...Array(7)].map((_, i) => (
-            <div key={i} className="wave-bar" />
-          ))}
-        </div>
+        {isProcessing ? (
+          <div className="orb-loader">
+            <l-dot-pulse size="35" speed="1.3" color="#F5F0E8"></l-dot-pulse>
+          </div>
+        ) : (
+          <div className="waveform">
+            {[...Array(7)].map((_, i) => (
+              <div key={i} className="wave-bar" />
+            ))}
+          </div>
+        )}
       </div>
+
     </div>
   );
 }

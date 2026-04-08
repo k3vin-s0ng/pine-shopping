@@ -1,9 +1,67 @@
 "use client";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Orb from "./orb";
 
 export default function Hero({ onComplete, onInterimTranscript, onListeningChange }) {
   const router = useRouter();
+  const [pineResponse, setPineResponse] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const [placeholderVisible, setPlaceholderVisible] = useState(true);
+  const wordTimerRef = useRef(null);
+  const cycleTimerRef = useRef(null);
+  const fadeTimerRef = useRef(null);
+  const hasStartedRef = useRef(false);
+
+  const PLACEHOLDERS = ["Thinking...", "Searching...", "Curating...", "Sourcing...", "Discovering...", "Exploring...", "Refining...", "Handpicking..."];
+
+  function stopCycling() {
+    clearInterval(cycleTimerRef.current);
+    clearTimeout(fadeTimerRef.current);
+    cycleTimerRef.current = null;
+    fadeTimerRef.current = null;
+  }
+
+  function startCycling() {
+    hasStartedRef.current = true;
+    setPineResponse("");
+    setIsProcessing(true);
+    setPlaceholderIndex(0);
+    setPlaceholderVisible(true);
+
+    let idx = 0;
+    cycleTimerRef.current = setInterval(() => {
+      // Fade out
+      setPlaceholderVisible(false);
+      fadeTimerRef.current = setTimeout(() => {
+        idx = (idx + 1) % PLACEHOLDERS.length;
+        setPlaceholderIndex(idx);
+        // Fade in
+        setPlaceholderVisible(true);
+      }, 300); // matches CSS transition duration
+    }, 1500); // each placeholder shows for 1.5s
+  }
+
+  function animateResponse(text) {
+    // Stop cycling and clear any in-progress word animation
+    stopCycling();
+    setIsProcessing(false);
+    if (wordTimerRef.current) clearInterval(wordTimerRef.current);
+    setPineResponse("");
+
+    const words = text.trim().split(" ");
+    let i = 0;
+    // Interval starts when called — onPineResponse fires only after audio.play() resolves in inworldTTS.ts
+    wordTimerRef.current = setInterval(() => {
+      i++;
+      setPineResponse(words.slice(0, i).join(" "));
+      if (i >= words.length) {
+        clearInterval(wordTimerRef.current);
+        wordTimerRef.current = null;
+      }
+    }, 200); // ~200ms per word
+  }
 
   function sendChip(text) {
     router.push(`/conversation?q=${encodeURIComponent(text)}`);
@@ -38,7 +96,7 @@ export default function Hero({ onComplete, onInterimTranscript, onListeningChang
         </div>
  
         {/* Center orb */}
-        <Orb onComplete={onComplete} onInterimTranscript={onInterimTranscript} onListeningChange={onListeningChange} />
+        <Orb onComplete={onComplete} onInterimTranscript={onInterimTranscript} onListeningChange={onListeningChange} onPineResponse={animateResponse} onProcessingStart={startCycling} isProcessing={isProcessing} />
 
         {/* Right category column */}
         <div className="cat-col" style={{ opacity: 0, animation: "fadeUp 0.7s ease forwards 0.65s" }}>
@@ -64,10 +122,23 @@ export default function Hero({ onComplete, onInterimTranscript, onListeningChang
 
       </div>
 
-      {/* CTA text below orb */}
+      {/* CTA text below orb — cycles placeholders while processing, then animates Pine's response */}
       <div className="orb-cta">
-        <h2><em>Just start talking to Pine</em></h2>
-        <p>&ldquo;Find me a linen shirt for a weekend escape...&rdquo;</p>
+        <h2
+          className="orb-cta-h2"
+          style={{ opacity: isProcessing ? (placeholderVisible ? 1 : 0) : 1 }}
+        >
+          <em>
+            {pineResponse
+              ? pineResponse
+              : isProcessing
+              ? PLACEHOLDERS[placeholderIndex]
+              : hasStartedRef.current
+              ? "\u00A0"
+              : "Just start talking to Pine"}
+          </em>
+        </h2>
+        <p>{pineResponse || isProcessing || hasStartedRef.current ? "\u00A0" : "\u201CFind me a linen shirt for a weekend escape...\u201D"}</p>
       </div>
 
       {/* Prompt chips */}

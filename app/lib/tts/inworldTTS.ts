@@ -33,7 +33,11 @@ function speakFallback(text: string): Promise<void> {
   });
 }
 
-export async function speakWithInworld(text: string): Promise<void> {
+export async function speakWithInworld(
+  text: string,
+  onStart?: () => void,
+  onVolume?: (rms: number) => void,
+): Promise<void> {
   if (!text) return;
 
   try {
@@ -60,17 +64,56 @@ export async function speakWithInworld(text: string): Promise<void> {
     console.log("[InworldTTS] Starting audio playback, duration will be determined on load");
 
     await new Promise<void>((resolve, reject) => {
+      let volumeRaf: number | null = null;
+      let audioCtx: AudioContext | null = null;
+
       audio.onended = () => {
+        if (volumeRaf !== null) cancelAnimationFrame(volumeRaf);
+        audioCtx?.close();
         URL.revokeObjectURL(url);
         resolve();
       };
       audio.onerror = (e) => {
+        if (volumeRaf !== null) cancelAnimationFrame(volumeRaf);
+        audioCtx?.close();
         URL.revokeObjectURL(url);
         console.error("[InworldTTS] Audio element error:", e);
         reject(new Error("Audio playback failed"));
       };
       audio.play().then(() => {
         console.log("[InworldTTS] audio.play() succeeded");
+        onStart?.();
+
+        // Wire up real-time amplitude analysis via Web Audio API
+        if (onVolume) {
+          const emitVolume = onVolume;
+          try {
+            audioCtx = new AudioContext();
+            const source = audioCtx.createMediaElementSource(audio);
+            const analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 256;
+            analyser.smoothingTimeConstant = 0.6;
+            source.connect(analyser);
+            analyser.connect(audioCtx.destination);
+
+            const data = new Uint8Array(analyser.frequencyBinCount);
+
+            function pollVolume() {
+              analyser.getByteTimeDomainData(data);
+              // RMS of signed amplitude (byte data is offset by 128)
+              let sum = 0;
+              for (let i = 0; i < data.length; i++) {
+                const s = (data[i] - 128) / 128;
+                sum += s * s;
+              }
+              emitVolume(Math.sqrt(sum / data.length));
+              volumeRaf = requestAnimationFrame(pollVolume);
+            }
+            volumeRaf = requestAnimationFrame(pollVolume);
+          } catch (e) {
+            console.warn("[InworldTTS] Web Audio API unavailable, volume analysis skipped:", e);
+          }
+        }
       }).catch((e) => {
         console.error("[InworldTTS] audio.play() rejected:", e);
         reject(e);
