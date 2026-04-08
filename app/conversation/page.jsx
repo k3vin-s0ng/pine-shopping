@@ -145,12 +145,16 @@ function ConversationView() {
 
   // Hook called after function definitions so handleVoiceQuery is in scope.
   // The ref inside the hook always calls the latest version regardless of order.
-  const { listening: voiceListening, processing: voiceProcessing, toggle: toggleVoice } =
+  const { listening: voiceListening, processing: voiceProcessing, toggle: toggleVoice, stop: stopVoice } =
     useVoiceRecorder({
       onTranscript: handleVoiceQuery,
       onInterimTranscript: (text) => setBottomInput(text),
       continuous: true,
     });
+
+  // Stop voice recognition on unmount so the mic indicator doesn't flash
+  // when navigating away while activeRef is still true inside the hook.
+  useEffect(() => () => stopVoice(), []);
 
   function handleRestart() {
     window.speechSynthesis?.cancel();
