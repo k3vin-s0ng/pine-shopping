@@ -59,7 +59,7 @@ function ConversationView() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // Send priorHistory (without current message) — intentExtraction.ts appends userMessage itself
-        body: JSON.stringify({ query: text, history: priorHistory, accumulatedIntent: currentIntent }),
+        body: JSON.stringify({ query: text, history: priorHistory, accumulatedIntent: currentIntent, skipClarification: !!opts.skipClarification }),
       });
 
       const data = await res.json();
@@ -204,7 +204,7 @@ function ConversationView() {
     }
 
     if (initialQuery) {
-      handleSubmit(initialQuery);
+      handleSubmit(initialQuery, { skipClarification: true });
     } else {
       setLoading(false);
       setStatus("Pine is listening");

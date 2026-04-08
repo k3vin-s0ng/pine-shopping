@@ -5,7 +5,8 @@ import { Product } from "@/app/lib/products";
 
 const SERP_API_KEY = process.env.SERP_API_KEY;
 const SEARCH_VARIANT_COUNT = 3;
-const RESULTS_PER_QUERY = 10;
+const RESULTS_PER_QUERY = 10; // note: google_shopping engine ignores num — slice applied post-fetch
+const MAX_RESULTS_PER_QUERY = 10; // hard cap applied after fetch since SerpAPI ignores num
  
 const openai = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
@@ -118,7 +119,7 @@ async function callSerpAPI(searchQuery: string): Promise<any[]> {
     console.log("[SerpAPI] results[0]:", JSON.stringify(results[0], null, 2));
   }
 
-  return results;
+  return results.slice(0, MAX_RESULTS_PER_QUERY);
 }
 
 async function callSerpAPIBatch(queries: string[]): Promise<any[]> {
@@ -209,7 +210,7 @@ Rules:
 
 // POST: LLM intent extraction → expanded SerpAPI query set → filtered products
 export async function POST(request: NextRequest) {
-  const { query, history, accumulatedIntent } = await request.json();
+  const { query, history, accumulatedIntent, skipClarification } = await request.json();
 
   if (accumulatedIntent && Object.keys(accumulatedIntent).length > 0) {
     console.log("[POST /api/search] Accumulated intent present");
@@ -222,7 +223,7 @@ export async function POST(request: NextRequest) {
 
   const intent = await extractIntent(query, history);
 
-  if (intent.clarification_needed) {
+  if (intent.clarification_needed && !skipClarification) {
     const message =
       intent.clarification_question ||
       "Could you tell me a bit more about what you're looking for?";
