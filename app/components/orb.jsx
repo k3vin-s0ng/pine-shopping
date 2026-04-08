@@ -354,8 +354,12 @@ export default function Orb({ onComplete: _onComplete, onInterimTranscript, onLi
 
     rec.onend = async () => {
       setListening(false);
-      onListeningChange?.(false);
-      setTimeout(() => onInterimTranscript?.(""), 1000);
+      // Delay both the listening state and transcript clear by the same linger
+      // duration so the input bar stays populated long enough for the user to read it.
+      setTimeout(() => {
+        onListeningChange?.(false);
+        onInterimTranscript?.("");
+      }, 1000);
       recognitionRef.current = null;
       if (!activeRef.current) return;
       if (finalTranscript.trim()) {
