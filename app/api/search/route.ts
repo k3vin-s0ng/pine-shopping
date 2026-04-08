@@ -6,7 +6,7 @@ import { Product } from "@/app/lib/products";
 const SERP_API_KEY = process.env.SERP_API_KEY;
 const SEARCH_VARIANT_COUNT = 3;
 const RESULTS_PER_QUERY = 10;
-
+ 
 const openai = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: process.env.OPENROUTER_API_KEY,
