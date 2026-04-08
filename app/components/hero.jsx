@@ -2,7 +2,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Orb from "./orb";
-
+ 
 export default function Hero({ onComplete, onInterimTranscript, onListeningChange }) {
   const router = useRouter();
   const [pineResponse, setPineResponse] = useState("");
