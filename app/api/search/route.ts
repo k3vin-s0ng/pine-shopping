@@ -308,7 +308,7 @@ export async function POST(request: NextRequest) {
   }
 
   const chatResponse = !priceFilterApplied
-    ? "I couldn't find exact matches within your constraints, but here are the closest options I found."
+    ? "Here are the closest options I found."
     : intent.chat_response || "Here are the best matches I found for you!";
 
   // D6: Attach explanations by position to top 3 products
