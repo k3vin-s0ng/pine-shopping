@@ -1,6 +1,6 @@
 # Pine — Active Task Board
 
-_Updated: 2026-04-07 (Inworld TTS fix, orb speaking state, home page Pine response display, session reset) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
+_Updated: 2026-04-08 (Orb halo speaking animation, Web Audio API volume sync, mic flash fix, chip skipClarification, SerpAPI result cap, fallback copy) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
 
 ---
 
@@ -20,7 +20,6 @@ _Updated: 2026-04-07 (Inworld TTS fix, orb speaking state, home page Pine respon
 | # | Task | Owner | Notes |
 |---|---|---|---|
 | I-02 | Competitive research (Google Shopping AI, Perplexity Shopping, etc.) | [D]/[E] | Needed before PRD |
-| E2 | Orb UI state machine | [K] | 3 of 4 states implemented: `idle`, `listening`, `processing`. CSS classes wired. `responding` state (while TTS plays) still missing. |
 | K-voice | Whisper/ngrok STT pipeline restoration | [K] | MediaRecorder + Python transcription backend replaced by browser `SpeechRecognition` API in `orb.jsx` (`1bf8fa0`). Original MediaRecorder/ngrok code preserved in commented blocks with `[KEVIN - Whisper pipeline: restore for Data Agent integration]` markers. Decision on which to use long-term is open. |
 | D-voice-gap | Voice path missing accumulatedIntent | [D] | **Known gap:** `useConvo.ts` (voice path) does not pass `accumulatedIntent` to `/api/search` — only history is sent. Multi-turn constraint accumulation works correctly on `/conversation` (text path). Voice is a single-turn entry point so impact is minimal — fix when voice and text paths are unified into a single state manager. Do not fix in isolation before that unification. |
 
@@ -171,6 +170,14 @@ _Updated: 2026-04-07 (Inworld TTS fix, orb speaking state, home page Pine respon
 | ✓ | Adjacent search queries — Kevin added `related_search_queries` field to `IntentExtractionResult` and prompt. `buildSearchQueries()` in `route.ts` combines `search_query` + up to 2 related queries, deduplicates, runs all in parallel via `callSerpAPIBatch()`. `SEARCH_VARIANT_COUNT=3`, `RESULTS_PER_QUERY=10`. Improves recall for edge wordings. | 2026-04-05 |
 | ✓ | Orb STT switched from MediaRecorder + Python/ngrok to browser `SpeechRecognition` API — eliminates ngrok dependency for local dev. Original Whisper pipeline preserved in commented blocks in `orb.jsx` for Kevin's Data Agent integration phase. | 2026-04-05 |
 | ✓ | Discover page restored (`app/discover/page.jsx`) — deleted in 314a790, recovered. 4 curated sections fetching in parallel, skeleton loading, "Talk to Pine →" CTA. Header nav link re-pointed to `/discover`. | 2026-04-05 |
+| ✓ | E2 complete: Orb halo speaking animation — `requestAnimationFrame` loop in `orb.jsx` lerps halo scale, opacity, background alpha, and `filter: brightness() saturate()` when `talking=true`. Asymmetric lerp (attack 0.08, release 0.04). 3-frequency sine fallback (10/17/27 Hz) when no live audio. CSS class `speaking` on `orb-wrap`. | 2026-04-08 |
+| ✓ | Web Audio API wired to Inworld TTS — `speakWithInworld` accepts `onVolume(rms)` callback. `AudioContext` + `AnalyserNode` pipeline polls RMS via `getByteTimeDomainData` in rAF loop. Feeds `liveVolumeRef` in `orb.jsx`; halo animation consumes live amplitude. | 2026-04-08 |
+| ✓ | Halo inset sizes reduced 1.3× — `.orb-halo-1` `inset: -32px → -25px`, `.orb-halo-2` `inset: -12px → -9px` in `globals.css`. | 2026-04-08 |
+| ✓ | Mic flash on conversation → home fix — `stopVoice()` cleanup in `useEffect` unmount in `conversation/page.jsx` stops `SpeechRecognition` before route transition completes. | 2026-04-08 |
+| ✓ | Input bar linger delay synced — `onListeningChange(false)` and `onInterimTranscript("")` both delayed 1000ms in same `setTimeout` in `orb.jsx`, matching conversation page behavior. | 2026-04-08 |
+| ✓ | Chip clicks no longer trigger clarification — `skipClarification: true` passed from initial URL query path in `conversation/page.jsx`; `route.ts` skips clarification gate when flag is set. | 2026-04-08 |
+| ✓ | SerpAPI result count capped — `MAX_RESULTS_PER_QUERY = 10` constant in `route.ts`; `callSerpAPI()` slices results after fetch. `google_shopping` engine ignores `num` param and returns ~100; 3 parallel queries were producing ~300 merged items. | 2026-04-08 |
+| ✓ | Fallback message simplified — "I couldn't find exact matches within your constraints, but here are the closest options I found." → "Here are the closest options I found." in `route.ts`. | 2026-04-08 |
 
 ---
 
