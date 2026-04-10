@@ -1,6 +1,6 @@
 # Pine — Product Roadmap
 
-_Last updated: 2026-04-08 (Orb halo speaking animation, Web Audio API volume sync, mic flash fix, chip skipClarification, SerpAPI result cap, fallback message copy)_
+_Last updated: 2026-04-10 (Placeholder cycling animation, ldrs dotPulse orb loader, D6 fully wired to ProductCard, flash bug fixes)_
 
 ---
 
@@ -73,7 +73,7 @@ The goal is to upgrade Pine from Level 3.5 (single intent extraction call + Serp
 - [x] E1: Voice input — `orb.jsx` now uses browser `SpeechRecognition` API (no ngrok dependency). Original MediaRecorder/Python pipeline preserved in commented blocks for future Data Agent integration. Auto-routing complete: successful voice search stores results in localStorage (`orbData`) and navigates to `/conversation`; zero-result turns loop back to listening on landing.
 - [x] E2: Orb UI state machine — idle / listening / processing / speaking all implemented. `talking` state drives a `requestAnimationFrame` halo pulsation loop in `orb.jsx`; halo scale, opacity, background alpha, and glow radius lerp against live audio RMS from Web Audio API (or a 3-frequency sine fallback when RMS is zero). `orb-wrap` gets `speaking` CSS class during TTS playback.
 - [x] E3: Voice output via Inworld TTS — `speakWithInworld` in `inworldTTS.ts` proxied through `/api/tts`. `INWORLD_TTS_API_KEY` env var fixed (was `NEXT_PUBLIC_INWORLD_API_KEY`). Falls back to Web Speech Synthesis on failure. `onStart` callback added to `speakWithInworld` — fires when `audio.play()` resolves (audio actually starts).
-- [x] E4: Result cards with intent-match explanation display (3 cards max, retailer logo link) — `ProductCard.jsx` + `ProductGrid.jsx` live in `/conversation`; D6 explanation slot stubbed with TODO
+- [x] E4: Result cards with intent-match explanation display (3 cards max, retailer logo link) — `ProductCard.jsx` + `ProductGrid.jsx` live in `/conversation`; D6 explanation fully wired — `ProductGrid` passes `reason={product.explanation}` to `ProductCard`, which renders it in the AI Recommendation slot (falls back to product description when explanation absent)
 - [x] E5: Typing fallback input (visually subordinate, functionally equal to voice) — `inputbar.jsx` navigates to `/conversation`, `BottomBar.jsx` submits follow-ups to API
 
 ### Shared
@@ -172,7 +172,10 @@ The long-term product vision is payment completing on Pine with direct retailer 
 | 2026-04-08 | Mic flash on conversation → home navigation fixed | `SpeechRecognition` instance in `orb.jsx` was not cleaned up on unmount, causing the browser mic indicator to flash on and off during route transition. Fixed by destructuring `stop: stopVoice` from `useVoiceRecorder` in `conversation/page.jsx` and adding `useEffect(() => () => stopVoice(), [])` cleanup. |
 | 2026-04-08 | Input bar linger delay synced between home and conversation pages | `onListeningChange(false)` and `onInterimTranscript("")` are now both delayed 1000ms inside the same `setTimeout` in `orb.jsx`. Prevents `inputDisplayValue` from switching from `interimValue` to `text` before the interim is cleared, which was causing the user's transcribed text to disappear instantly on the home page. |
 | 2026-04-08 | Fallback message copy simplified | Price-filter fallback message changed from "I couldn't find exact matches within your constraints, but here are the closest options I found." → "Here are the closest options I found." |
-| 2026-04-05 | D6 scoped to SerpAPI-only explanation generation for demo | `generateExplanations` fires after `resolveRetailerUrls` with `raw_intent_summary` + product name + price only — no specs or review signals. Explanation quality will improve when Kevin's enriched result objects (review signals, specs) are available in Phase 4. D5 utility scoring deferred to Phase 4. Kevin's Data Agent deferred past Character Capital deadline. |
+| 2026-04-05 | D6 scoped to SerpAPI-only explanation generation for demo | `generateExplanations` fires in parallel with SerpAPI (not after URL resolution) using only `raw_intent_summary`. Positional `string[]` output — no product names needed at call time. Explanation quality will improve when Kevin's enriched result objects (review signals, specs) are available in Phase 4. D5 utility scoring deferred to Phase 4. Kevin's Data Agent deferred past Character Capital deadline. |
+| 2026-04-10 | Placeholder cycling animation chosen over static "Processing..." state | PLACEHOLDERS array cycles 8 phrases every 1500ms with CSS opacity fade while Pine processes. Triggered by `onProcessingStart` callback on Orb → `hero.jsx`. `hasStartedRef` pattern ensures idle copy ("Just start talking to Pine", "Find me a linen shirt...") never reappears after first interaction — replaced permanently with `&nbsp;` to preserve layout. |
+| 2026-04-10 | ldrs dotPulse chosen as orb processing indicator | During `isProcessing`, waveform bars are replaced by a centered `<l-dot-pulse>` web component from the `ldrs` library. Matches the luxury aesthetic and is self-contained (no custom animation CSS needed). Registered at module level via `dotPulse.register()`. |
+| 2026-04-10 | pineHandoff extended to carry products array to eliminate conversation page mount flash | Previously, conversation page always fired a second API call on mount, causing a brief "no results found" state. `pineHandoff` (localStorage) now includes `products` and `chatResponse` from the orb turn. Page hydrates state directly from handoff if products are present, skipping the redundant API call entirely. |
 
 ---
 
