@@ -14,7 +14,7 @@ if (typeof window !== "undefined") dotPulse.register();
 // const SPEECH_THRESHOLD = 0.025;
 // const SILENCE_THRESHOLD = 0.025;
 // const SILENCE_DURATION_MS = 500;
-
+ 
 export default function Orb({ onComplete: _onComplete, onInterimTranscript, onListeningChange, onPineResponse, onProcessingStart, isProcessing }) {
   const router = useRouter();
   const [listening, setListening] = useState(false);
