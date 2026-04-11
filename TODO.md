@@ -1,6 +1,6 @@
 # Pine — Active Task Board
 
-_Updated: 2026-04-10 (Placeholder cycling animation, ldrs dotPulse orb loader, flash bug fixes, D6 wired to ProductCard) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
+_Updated: 2026-04-10 (Serper.dev switch, Skimlinks interim affiliate, product catalog index split to Phase 2, DataForSEO batch catalog scoped) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
 
 ---
 
@@ -8,10 +8,9 @@ _Updated: 2026-04-10 (Placeholder cycling animation, ldrs dotPulse orb loader, f
 
 | # | Task | Owner | Notes |
 |---|---|---|---|
-| ~~B-06~~ | ~~SerpAPI key invalid~~ | ~~[K]~~ | **✅ Resolved 2026-04-07.** Kevin generated a new key; Daniel updated `.env.local`. SerpAPI calls confirmed working. |
-| B-05 | TypeScript dropped for JSX in component layer | [K]/[D] | All new components are `.jsx` with no type annotations. This breaks the TypeScript-strict convention in CLAUDE.md and loses type safety on the conversation history, intent extraction output, and product card props. Decision needed: migrate new components to TSX or accept JSX for UI layer. |
+| B-05 | TypeScript dropped for JSX in component layer | [K]/[D] | All new components are `.jsx` with no type annotations. Breaks TypeScript-strict convention in CLAUDE.md. Decision needed: migrate new components to TSX or accept JSX for UI layer. |
 | B-02 | Daniel↔Kevin Data Agent handoff contract | [D]/[K] | Schema defined in CLAUDE.md. Needs explicit agreement from Kevin before K2+ and D5+ can be built. Priority: next team meeting. |
-| ~~B-03~~ | ~~Direct retailer URL resolution strategy~~ | ~~[K]~~ | **✅ Resolved 2026-04-05.** `resolveRetailerUrls()` implemented in `route.ts` — uses `serpapi_immersive_product_api` field from each shopping result to call the immersive product endpoint, extracts `product_results.stores`, picks best seller (Amazon → Target → Walmart → Best Buy → Nordstrom → first available), replaces `product_link` with direct retailer URL. `affiliate_degraded: true` flagged on failures. Affiliate linking confirmed working. |
+| B-07 | Catalog scope not yet decided | [D] | Daniel must decide which 2–3 retailers and 3–5 product categories Kevin targets first for catalog ingestion. Blocks K-catalog-2 and K-catalog-3. Decision needed this week. |
 
 ---
 
@@ -20,39 +19,45 @@ _Updated: 2026-04-10 (Placeholder cycling animation, ldrs dotPulse orb loader, f
 | # | Task | Owner | Notes |
 |---|---|---|---|
 | I-02 | Competitive research (Google Shopping AI, Perplexity Shopping, etc.) | [D]/[E] | Needed before PRD |
-| K-voice | Whisper/ngrok STT pipeline restoration | [K] | MediaRecorder + Python transcription backend replaced by browser `SpeechRecognition` API in `orb.jsx` (`1bf8fa0`). Original MediaRecorder/ngrok code preserved in commented blocks with `[KEVIN - Whisper pipeline: restore for Data Agent integration]` markers. Decision on which to use long-term is open. |
-| D-voice-gap | Voice path missing accumulatedIntent | [D] | **Known gap:** `useConvo.ts` (voice path) does not pass `accumulatedIntent` to `/api/search` — only history is sent. Multi-turn constraint accumulation works correctly on `/conversation` (text path). Voice is a single-turn entry point so impact is minimal — fix when voice and text paths are unified into a single state manager. Do not fix in isolation before that unification. |
+| K-voice | Whisper/ngrok STT pipeline restoration | [K] | MediaRecorder + Python transcription backend replaced by browser `SpeechRecognition` API in `orb.jsx`. Original MediaRecorder/ngrok code preserved in commented blocks. Decision on which to use long-term is open. |
+| D-voice-gap | Voice path missing accumulatedIntent | [D] | `useConvo.ts` (voice path) does not pass `accumulatedIntent` to `/api/search`. Multi-turn constraint accumulation works correctly on `/conversation` (text path). Fix when voice and text paths are unified. Do not fix in isolation. |
+| K-catalog-research | Kevin researching vector DB options and retrieval architecture | [K] | Evaluating HNSW (Faiss/Qdrant) vs. managed (Pinecone/Weaviate). Target: sub-2s retrieval. Qdrant self-hosted recommended — HNSW by default, self-hostable, $30/mo VPS for 50K products. |
 
 ---
 
 ## 🟢 Up Next (Prioritized)
 
-### Week 1 — Critical Path
+### Immediate — This Week
 
 | # | Task | Owner | Notes |
 |---|---|---|---|
-| K1 | Data Agent: structured query intake contract | [K] | Accept typed query object from Reasoning Agent. Schema in CLAUDE.md. Agree with Daniel before building. |
-| ~~K8~~ | ~~Direct retailer URL resolution~~ | ~~[K]~~ | **✅ Resolved 2026-04-05** — see B-03. |
-| K2 | Retailer scraping layer | [K] | Adapt existing scraping agent. Start with Amazon + Target + 1 category retailer. Narrow and reliable beats broad and flaky. |
-| E2 | Orb UI state machine | [K]/[E] | → Moved to 🟡 In Progress. `responding` state still needed. |
+| ~~D9~~ | ~~Swap SerpAPI → Serper.dev in `route.ts`~~ | ~~[D]~~ | **✅ Complete 2026-04-10.** See Completed. |
+| D10 | **Wire Skimlinks as interim affiliate layer** | [D] | Wrap Serper product URLs via Skimlinks JS snippet or API. Cuts session call count 27 → 9. Full affiliate accuracy returns when Kevin's catalog has direct retailer URLs. |
+| B-07 | Decide catalog scope (retailers + categories) | [D] | Make this call with Kevin before he starts K-catalog-2. Block of time: 30 minutes. |
+
+### Week 1–2 — Kevin Catalog (Phase 2)
+
+| # | Task | Owner | Notes |
+|---|---|---|---|
+| K-catalog-3 | Scope: confirm target retailers + product categories | [K]/[D] | Start narrow: Amazon + Target + 1 category retailer. 3–5 categories max. Narrow and reliable beats broad and flaky for demo. |
+| K-catalog-2 | Batch catalog population via DataForSEO Merchant API | [K] | Use async Merchant API in batch mode (not real-time) to discover ~50K products. DataForSEO is async-only — correct role is background ingestion only, never real-time query serving. Estimated one-time cost ~$15–50. |
+| K-catalog-1 | Vector index setup (Qdrant self-hosted) | [K] | HNSW index over catalog records. 2GB RAM VPS handles ~50K products at ~30ms retrieval. Expose retrieval endpoint for Reasoning Agent. Enables D5 utility scoring and eliminates per-query Serper costs once live. |
 
 ### Week 2 — Reasoning + Integration
 
 | # | Task | Owner | Notes |
 |---|---|---|---|
-| K3 | Product page fetch + structured extraction | [K] | Per product: price, in_stock, title, specs, image_url, url (must be direct retailer URL — see K8), retailer_sku |
+| K1 | Data Agent: structured query intake contract | [K] | Accept typed query object from Reasoning Agent. Schema in CLAUDE.md. Agree with Daniel before building. |
+| K2 | Retailer scraping layer | [K] | Adapt existing scraping agent. Start with Amazon + Target + 1 category retailer. |
+| K3 | Product page fetch + structured extraction | [K] | Per product: price, in_stock, title, specs, image_url, url (must be direct retailer URL), retailer_sku |
 | K4 | Review signal extraction | [K] | `{ quality_signal, fit_signal, value_signal, avg_rating, review_count }`. Fallback: avg_rating + review_count only if review scraping blocked. |
-| K5 | Enriched result object construction | [K] | Combine K3+K4 into typed JSON per product per CLAUDE.md schema. `url` field must be direct retailer URL (see K8). Must be stable — Daniel builds D5/D6 against it. |
+| K5 | Enriched result object construction | [K] | Combine K3+K4 into typed JSON per product per CLAUDE.md schema. `url` field must be direct retailer URL. Must be stable — Daniel builds D5/D6 against it. |
 | K6 | Sparse result flag | [K] | Flag which hard constraint failed when <3 results returned. Triggers D7. |
-| K7 | SerpAPI silent fallback | [K] | Fires when scraping returns 0 or errors. When falling back to SerpAPI, Kevin must still resolve to direct retailer URLs (see K8) or flag affiliate linking as degraded for that result. |
-| D5 | Personalized utility scoring | [D] | Score Kevin's enriched results against soft preference vector. Replaces default SerpAPI ordering. Requires K5 stable. |
-| D6 | Intent-match explanation generation | [D] | One sentence per top 3 results using Kevin's review_signals + expressed intent. Highest-visibility Level 4 feature. |
+| K7 | Serper silent fallback | [K] | Fires when catalog returns 0 or errors. When falling back to Serper, flag affiliate linking as degraded for that result. |
+| D5 | Personalized utility scoring | [D] | Score Kevin's enriched results against soft preference vector. Replaces default ordering. Requires K5 stable. |
 | D7 | Constraint relaxation logic | [D] | When K6 sparse flag received: relax least-important constraint, re-query, tell user what changed. |
 | D8 | Confident single recommendation mode | [D] | When top utility score significantly outscores others, Pine commits to one. User can ask for alternatives. |
-| E3 | Voice output via Web Speech Synthesis | [E] | Pine speaks clarifications + explanations. Browser-native. Completes voice loop. |
-| E4 | Result cards with explanation display | [E] | 3 cards max. Image, price, "View at [Retailer]" link with retailer logo, one-sentence D6 explanation. No generic "Buy Now." Link must use direct retailer URL from Kevin's enriched result object for affiliate tracking to work. |
-| E5 | Typing fallback input | [E] | Always present, visually subordinate to orb. Full pipeline parity with voice. |
-| — | Integration test: full voice → intent → Data Agent → scoring → explanation → display | [D]/[K]/[E] | End-to-end demo rehearsal. Must pass before Character Capital. Verify affiliate URLs resolve correctly. |
+| — | Integration test: full voice → intent → catalog → scoring → explanation → display | [D]/[K]/[E] | End-to-end demo rehearsal. Verify affiliate URLs resolve correctly from Kevin's catalog. |
 
 ### PM / Product (Parallel)
 
@@ -78,7 +83,8 @@ _Updated: 2026-04-10 (Placeholder cycling animation, ldrs dotPulse orb loader, f
 | # | Task | Owner | Notes |
 |---|---|---|---|
 | S-01 | Category and mustHaves filter post-search | [D] | Shop — price/brand done; `hard_constraints.must_have_attributes` now extracted by LLM but not yet used for post-search filtering |
-| S-04 | End-to-end mock mode test for D1/D2 | [D] | Validate all acceptance criteria with `MOCK_INTENT=true` and `MOCK_CLARIFY=true`. Blocked until B-01 (API key) resolved for live testing. |
+| S-04 | End-to-end mock mode test for D1/D2 | [D] | Validate all acceptance criteria with `MOCK_INTENT=true` and `MOCK_CLARIFY=true`. |
+| D10-full | Replace `resolveTop3Urls()` with catalog direct URLs | [D] | Once K-catalog-1 is live, Kevin's enriched result objects include direct retailer URLs as a first-class field — eliminating the second Serper API call entirely. Remove `resolveTop3Urls()` at that point. |
 | S-02 | Result deduplication | [D] | Shop |
 | S-03 | Multi-item fetch for Plan Mode bundles | [D] | Plan |
 
@@ -88,15 +94,15 @@ _Updated: 2026-04-10 (Placeholder cycling animation, ldrs dotPulse orb loader, f
 | C-01 | Shop / Plan mode toggle | [E] | Both |
 | C-02 | Plan summary card component | [E] | Plan |
 | C-03 | Product card — "Add to Plan" button | [E] | Plan |
-| C-05 | ~~Deduplicate generalheader.tsx vs header.tsx~~ | — | Resolved — both deleted in Kevin's UI overhaul. `header.jsx` is the only header now. |
 | I4 | Right detail panel full implementation | [E] | Currently minimal |
 
-### Infrastructure & Backend
+### Infrastructure & Backend (Phase 4)
 | # | Task | Owner | Notes |
 |---|---|---|---|
-| K-01 | Database schema design | [K] | Phase 4 |
-| K-02 | User session API | [K] | Phase 4 |
-| K-03 | Saved plans storage | [K] | Phase 4 |
+| K-db-01 | User database schema design | [K] | Phase 4 — separate from catalog index (Phase 2) |
+| K-db-02 | User session API | [K] | Phase 4 |
+| K-db-03 | Saved plans storage | [K] | Phase 4 |
+| K-db-04 | Reddit enrichment pipeline | [K] | Phase 4 — batch scrape r/BuyItForLife, r/frugalmalefashion, 3–5 category subs. Extract product recommendation signals, store as `review_signals` in catalog. Not real-time. |
 | I1 | Replace localStorage auth with Kevin's backend | [K] | Phase 4 — btoa not production-safe |
 
 ### Product & Growth
@@ -112,21 +118,13 @@ _Updated: 2026-04-10 (Placeholder cycling animation, ldrs dotPulse orb loader, f
 
 | # | Task | Completed |
 |---|---|---|
+| ✓ | D10-partial: Top-3 direct URL resolution via Serper product detail call — `resolveTop3Urls()` added to `route.ts`. Fires 3 parallel Serper calls after filtering, using `product.product_id` + `product.name`. Walks `data.shopping ?? data.sellers` for a preferred-retailer URL (Amazon > Target > Walmart > Best Buy > Nordstrom > first). Updates `product.link` for top 3; products 4+ keep Google Shopping URL. Fails safe — original link preserved on any error. `product_id` field added to `Product` interface and threaded through `transformProducts()`. | 2026-04-11 |
+| ✓ | D9: SerpAPI → Serper.dev migration — `callSerpAPI()` rewritten to POST `https://google.serper.dev/shopping` with `X-API-KEY` header. `mapSerperResult()` added to remap Serper field names (`imageUrl → thumbnail`, `link → product_link`, `ratingCount → reviews`, `productId → product_id`). `extracted_price` fallback parses from price string. `resolveRetailerUrls()` call replaced with `[AFFILIATE - D10]` comment block. `SERP_API_KEY` commented out in `.env.local`. `SERPER_API_KEY` guard added to POST handler. All other orchestration logic (batch, dedup, D6 parallel) unchanged. | 2026-04-10 |
 | ✓ | LLM integration (OpenRouter + GPT-4o-mini) — API route intact | Phase 1 |
 | ✓ | SerpAPI Google Shopping integration — API route intact | Phase 1 |
-| ✓ | React UI: agent avatars, speech bubbles, product cards | Phase 1 — **⚠️ deleted in Kevin's UI overhaul 2026-03-29** |
-| ✓ | Clarification modal component | Phase 1 — **⚠️ deleted in Kevin's UI overhaul 2026-03-29** |
 | ✓ | 35-feature backlog spreadsheet + PM structure | Setup |
-| ✓ | Pass full conversation history to intent extraction (B-02 / I-01) — logic intact in API route | 2026-03-15 |
-| ✓ | Structured intent schema — IntentResult TypeScript type (L-01) — intact in API route | 2026-03-15 |
-| ✓ | Typing indicator and loading state — isTyping / isSearching (C-04) | 2026-03-15 — **⚠️ deleted** |
-| ✓ | Price filter layer — min/max on SerpAPI results and client-side (partial S-01) | 2026-03-15 — **⚠️ client-side deleted** |
-| ✓ | Price filter direction — "over $X" vs "under $X" without false-positives on model numbers | 2026-03-15 — **⚠️ deleted** |
-| ✓ | Original products ref — subsequent filters re-apply to original results, not prior filtered set | 2026-03-15 — **⚠️ deleted** |
-| ✓ | Voice input modal — hold-to-speak, transcript display, Done button submits | 2026-03-15 — **⚠️ deleted** |
-| ✓ | Auth system — sign in / sign up modal with localStorage persistence | 2026-03-15 — **⚠️ deleted** |
-| ✓ | Marketing landing page — hero, features, how-it-works, testimonials, footer | 2026-03-15 — **⚠️ deleted** |
-| ✓ | Removed non-functional Buy Now / Details buttons from product cards | 2026-03-15 — **⚠️ product cards deleted** |
+| ✓ | Pass full conversation history to intent extraction | 2026-03-15 |
+| ✓ | Structured intent schema — IntentResult TypeScript type | 2026-03-15 |
 | ✓ | Rejected travel pivot — documented rationale | 2026-03-25 |
 | ✓ | Affiliate monetization strategy finalized (Skimlinks + Amazon Associates) | 2026-03-25 |
 | ✓ | Pine rebrand from Sicero — navy/gold, pinecone logo | 2026-03-25 |
@@ -134,57 +132,29 @@ _Updated: 2026-04-10 (Placeholder cycling animation, ldrs dotPulse orb loader, f
 | ✓ | Daniel↔Kevin data contract schema defined in CLAUDE.md | 2026-03-25 |
 | ✓ | B-01: OpenRouter API key resolved — live LLM calls working | 2026-03-26 |
 | ✓ | D1: Structured intent extraction — IntentExtractionResult type + LLM prompt refactor | 2026-03-26 |
-| ✓ | D2: Intent confidence scoring (0.0–1.0) + clarification gate wired into shouldSearch path | 2026-03-26 |
-| ✓ | Kevin luxury UI redesign — new orb, inputbar, hero, header, curated stubs in JSX | 2026-03-29 |
+| ✓ | D2: Intent confidence scoring (0.0–1.0) + clarification gate | 2026-03-26 |
+| ✓ | Kevin luxury UI redesign — orb, inputbar, hero, header, curated stubs in JSX | 2026-03-29 |
 | ✓ | B-04: `/conversation` page created, wired to `/api/search` with full history passing | 2026-03-29 |
-| ✓ | E-06: `inputbar.jsx` navigates to `/conversation?q=…` on submit (Enter or send button) | 2026-03-29 |
-| ✓ | E-07: `ProductCard.jsx` + `ProductGrid.jsx` built in luxury design system | 2026-03-29 |
-| ✓ | E-08: `LeftPanel.jsx` echoes query + status; `ProductGrid` renders clarification when no products | 2026-03-29 |
-| ✓ | Bug: clarification bubble shown on empty-product searches — fixed with explicit `clarificationNeeded` flag from API | 2026-03-29 |
-| ✓ | Bug: current user message duplicated in every LLM call — fixed by sending `priorHistory` (not `newHistory`) to API | 2026-03-29 |
-| ✓ | Refine chips now submit directly to AI on click (no manual Enter required) | 2026-03-29 |
-| ✓ | D3: Preference accumulator implemented — `accumulatedIntent` state merges `hard_constraints` and `soft_preferences` forward across turns without dropping prior constraints. `mergeIntent()` exported from `intentExtraction.ts` (server-side reference). Client-side merge duplicated in `page.jsx`. `accumulatedIntent` sent to API on every call; clears on Restart. | 2026-03-30 |
-| ✓ | D3: ACCUMULATION RULE added to prompt — model instructed to carry all prior constraints forward in each turn's output. Refinement-turn confidence floor (≥0.7 when category + ≥1 constraint established) added. B-06 and B-07 resolved. | 2026-03-30 |
-| ✓ | D4: `user_expertise` field added to `IntentExtractionResult` — "novice" / "intermediate" / "expert" derived from vocabulary. USER EXPERTISE CLASSIFICATION section added to prompt with per-level clarification question style rules. | 2026-03-30 |
-| ✓ | Inworld TTS env var fix — `NEXT_PUBLIC_INWORLD_API_KEY` renamed to `INWORLD_TTS_API_KEY` in `.env.local` to match what `/api/tts/route.ts` reads. Dev server restart required after change. | 2026-04-07 |
-| ✓ | Orb `speaking` state added — `setSpeaking(true/false)` wraps `speakWithInworld` calls in `orb.jsx`; `orb-wrap` receives `speaking` CSS class during TTS playback. Completes E2 orb state machine (idle / listening / processing / speaking). | 2026-04-07 |
-| ✓ | `speakWithInworld` `onStart` callback — fires when `audio.play()` resolves (audio actually begins). Used to sync home page text animation with real audio start rather than an arbitrary delay. | 2026-04-07 |
-| ✓ | Home page Pine response transcription — `hero.jsx` animates Pine's reply word-by-word (200ms/word) in the `.orb-cta` area, replacing "Just start talking to Pine". Subtitle held as `&nbsp;` during response to preserve layout. Animation triggered by `onPineResponse` callback wired through `Orb` → `hero.jsx`. Starts when Inworld audio begins via `onStart`. | 2026-04-07 |
-| ✓ | Session reset on home page mount — `useEffect` in `page.tsx` clears `pineHandoff` and `orbData` from localStorage when user returns to `/`. Prevents stale orb history from leaking into a fresh session if user navigated away before `/conversation` consumed it. | 2026-04-07 |
-| ✓ | ProductGrid passes `reason={product.explanation}` to `ProductCard` — D6 explanations now render in the AI Recommendation slot. | 2026-04-07 |
-| ✓ | D6: Intent-match explanation generation — `generateExplanations()` in `route.ts` fires a single gpt-4o-mini call in parallel with `callSerpAPIBatch()` (not after, to eliminate latency). Takes only `raw_intent_summary` — no product names needed. Returns positional `string[]` (1 sentence, ≤15 words per result). Attached by array index to `filteredProducts[0–2]`; `[3+]` get `explanation: undefined`. Fails safe — error returns `[]`, products still returned. `explanation?: string` added to `Product` type. `ProductGrid.jsx` passes `reason={product.explanation}` to `ProductCard`, which renders it in the AI Recommendation slot (falls back to product description). SerpAPI-only for now; explanation quality improves when Kevin's enriched result objects are available in Phase 4. | 2026-04-10 |
-| ✓ | Confidence scoring overhaul — replaced vague bucket-based self-assessment with deterministic additive rubric (5 slots: Category 30, Specificity 25, Price 20, Attributes 15, Context 10). Specificity bonus ×1.1 when brand/exact price/precise sub-type present. Refinement turn bonus +20. Expertise-adjusted thresholds: novice 0.55, default 0.50, expert 0.40. Clarification question targeting: highest-weight zero-point slot only. Prompt-only change — no schema or route changes. | 2026-04-05 |
-| ✓ | API route now returns `intent` object on all response paths (clarification, search, SerpAPI error) — consumed by client-side accumulator. Accepts `accumulatedIntent` from frontend for D5 utility scoring (logged for now). | 2026-03-30 |
-| ✓ | Landing page UI updated to match Eric's HTML — `hero.jsx`, `inputbar.jsx`, `curated.jsx`, `globals.css` restyled | 2026-03-30 |
-| ✓ | Logo updated — `public/logo.png` + `favicon.ico` replaced; old logo archived as `public/old_logo.png` | 2026-03-30 |
-| ✓ | `useConvo.ts` hook created — manages voice conversation history, calls `searchProducts`, speaks `chatResponse` via Web Speech Synthesis (preferred voice: Samantha/Google US English/Zira, rate 1.05). Exports `processTranscript`, `isSpeaking`, `isThinking`, `stopSpeaking`, `reset`. | 2026-03-31 |
-| ✓ | E3: Voice output via Web Speech Synthesis — implemented in `useConvo.ts`. Pine speaks the `chatResponse` reply after each turn. `isSpeaking` state tracks active utterance. | 2026-03-31 |
-| ✓ | Python transcription backend expanded (`app/backend/conversation/main.py`) — added `/upload-chunk`, `/finalize` routes and `stitch_audio_chunks()` using pydub. Service now supports both single-file `/transcribe` and chunked upload+stitch flow. Exposed via ngrok for orb to call. | 2026-03-31 |
-| ✓ | `orb.jsx` fully wired for voice — MediaRecorder + Web Audio API VAD (RMS level monitoring, 100ms poll). Speech threshold 0.03, silence threshold 0.015, silence timeout 1200ms auto-stops recording. Audio blob POSTed to Python `/transcribe` endpoint. `listening` + `processing` CSS states active. | 2026-03-31 |
-| ✓ | Intent pivot bug fixed — `is_pivot` field added to `IntentExtractionResult` schema and prompt. On pivot, `page.jsx` resets `accumulatedIntent` and history to only the current turn; no prior category attributes leak into the new query. | 2026-03-31 |
-| ✓ | Price filter fallback added to `route.ts` — when budget/attribute filters remove all results, returns unfiltered products with explanatory message instead of empty grid. Empty SerpAPI response now returns a user-facing message instead of blank state. | 2026-03-31 |
-| ✓ | E1: Voice input auto-routing complete — orb accepts `onComplete` prop; when voice search returns products, `page.tsx` stores results in localStorage as `orbData` and routes to `/conversation`. Conversation page reads `orbData` on mount and pre-populates product grid (skips redundant API call). Zero-result loop (clarification) keeps user on landing and re-enters listening state. | 2026-04-02 |
-| ✓ | Mic VAD threshold tuning — SPEECH_THRESHOLD 0.03→0.025, SILENCE_THRESHOLD 0.015→0.025, SILENCE_DURATION_MS 1200ms→500ms. State order fix: `setListening(false)` now fires before `cleanupRecording()` in the silence timeout path. | 2026-04-02 |
-| ✓ | `useConvo.ts` now passes `products: Product[]` in `onAssistantFinished` callback alongside `resultCount` — enables orb to forward result data to the routing handler without a second API call. | 2026-04-02 |
-| ✓ | B-03 / K8: Direct retailer URL resolution — `resolveRetailerUrls()` in `route.ts` uses `serpapi_immersive_product_api` field to call SerpAPI immersive product endpoint, reads `product_results.stores`, picks best seller by priority (Amazon > Target > Walmart > Best Buy > Nordstrom > first). Replaces `product_link` with direct URL. `affiliate_degraded: true` on fallback. Affiliate linking confirmed working. | 2026-04-05 |
-| ✓ | Adjacent search queries — Kevin added `related_search_queries` field to `IntentExtractionResult` and prompt. `buildSearchQueries()` in `route.ts` combines `search_query` + up to 2 related queries, deduplicates, runs all in parallel via `callSerpAPIBatch()`. `SEARCH_VARIANT_COUNT=3`, `RESULTS_PER_QUERY=10`. Improves recall for edge wordings. | 2026-04-05 |
-| ✓ | Orb STT switched from MediaRecorder + Python/ngrok to browser `SpeechRecognition` API — eliminates ngrok dependency for local dev. Original Whisper pipeline preserved in commented blocks in `orb.jsx` for Kevin's Data Agent integration phase. | 2026-04-05 |
-| ✓ | Discover page restored (`app/discover/page.jsx`) — deleted in 314a790, recovered. 4 curated sections fetching in parallel, skeleton loading, "Talk to Pine →" CTA. Header nav link re-pointed to `/discover`. | 2026-04-05 |
-| ✓ | E2 complete: Orb halo speaking animation — `requestAnimationFrame` loop in `orb.jsx` lerps halo scale, opacity, background alpha, and `filter: brightness() saturate()` when `talking=true`. Asymmetric lerp (attack 0.08, release 0.04). 3-frequency sine fallback (10/17/27 Hz) when no live audio. CSS class `speaking` on `orb-wrap`. | 2026-04-08 |
-| ✓ | Web Audio API wired to Inworld TTS — `speakWithInworld` accepts `onVolume(rms)` callback. `AudioContext` + `AnalyserNode` pipeline polls RMS via `getByteTimeDomainData` in rAF loop. Feeds `liveVolumeRef` in `orb.jsx`; halo animation consumes live amplitude. | 2026-04-08 |
-| ✓ | Halo inset sizes reduced 1.3× — `.orb-halo-1` `inset: -32px → -25px`, `.orb-halo-2` `inset: -12px → -9px` in `globals.css`. | 2026-04-08 |
-| ✓ | Mic flash on conversation → home fix — `stopVoice()` cleanup in `useEffect` unmount in `conversation/page.jsx` stops `SpeechRecognition` before route transition completes. | 2026-04-08 |
-| ✓ | Input bar linger delay synced — `onListeningChange(false)` and `onInterimTranscript("")` both delayed 1000ms in same `setTimeout` in `orb.jsx`, matching conversation page behavior. | 2026-04-08 |
-| ✓ | Chip clicks no longer trigger clarification — `skipClarification: true` passed from initial URL query path in `conversation/page.jsx`; `route.ts` skips clarification gate when flag is set. | 2026-04-08 |
-| ✓ | SerpAPI result count capped — `MAX_RESULTS_PER_QUERY = 10` constant in `route.ts`; `callSerpAPI()` slices results after fetch. `google_shopping` engine ignores `num` param and returns ~100; 3 parallel queries were producing ~300 merged items. | 2026-04-08 |
-| ✓ | Fallback message simplified — "I couldn't find exact matches within your constraints, but here are the closest options I found." → "Here are the closest options I found." in `route.ts`. | 2026-04-08 |
-| ✓ | Placeholder cycling animation in `hero.jsx` — `PLACEHOLDERS` array ("Thinking...", "Searching...", "Curating...", etc.) cycles every 1500ms with 300ms opacity fade while Pine is processing. `onProcessingStart` callback on `Orb` triggers `startCycling()`; `onPineResponse` triggers `animateResponse()` which stops cycling and word-by-word renders the reply. `isProcessing` prop passed to `Orb`. | 2026-04-10 |
-| ✓ | ldrs dotPulse loader in `orb.jsx` — `ldrs` npm package installed; `dotPulse.register()` called at module level. While `isProcessing` is true, the waveform bars are replaced by a centered `<l-dot-pulse>` web component (size 35, speed 1.3, color #F5F0E8). `.orb-loader` CSS rule added (absolute centered, z-index 10, pointer-events none). | 2026-04-10 |
-| ✓ | Flash fix: pineResponse shown briefly before Thinking placeholder on clarification loop — `startCycling()` now calls `setPineResponse("")` before setting `isProcessing=true`. Old response never appears between turns. | 2026-04-10 |
-| ✓ | Flash fix: "Just start talking to Pine" briefly reappears after first interaction — `hasStartedRef` pattern added to `hero.jsx`. Once any turn begins, the idle copy is permanently replaced by `&nbsp;` (preserves layout height). Never reverts to idle text mid-session. | 2026-04-10 |
-| ✓ | Flash fix: "Find me a linen shirt for a weekend escape..." subtitle briefly reappears after first interaction — same `hasStartedRef` gate applied to subtitle `<p>`; renders `&nbsp;` after first turn. | 2026-04-10 |
-| ✓ | Flash fix: "No results found" briefly shown on conversation page mount when navigating from orb — `pineHandoff` now includes `products` and `chatResponse`. On mount, if `parsed.products.length > 0`, state is hydrated directly (products, history, accumulatedIntent, chatResponse, query, status, loading:false) without a second API call. Fallback re-fetch preserved if products field is missing. | 2026-04-10 |
-| ✓ | Mic flash fix (home page) — `activeRef.current = false` set and `recognitionRef.current.abort()` called in `orb.jsx` before `router.push()` fires on successful search. Prevents the `SpeechRecognition` instance from briefly restarting during route transition, which was causing the browser mic indicator to flash on and off. | 2026-04-10 |
+| ✓ | Bug: user message duplicated in every LLM call — fixed by sending `priorHistory` to API | 2026-03-29 |
+| ✓ | D3: Preference accumulator — `accumulatedIntent` state merges constraints across turns | 2026-03-30 |
+| ✓ | D4: `user_expertise` field — novice/intermediate/expert, drives clarification tone | 2026-03-30 |
+| ✓ | Confidence scoring overhaul — deterministic additive rubric, expertise-adjusted thresholds | 2026-04-05 |
+| ✓ | B-03 / K8: Direct retailer URL resolution via `serpapi_immersive_product_api` (disabled at scale — cost-prohibitive) | 2026-04-05 |
+| ✓ | Adjacent search queries — `related_search_queries` field, up to 3 parallel queries per turn | 2026-04-05 |
+| ✓ | Orb STT switched from MediaRecorder + Python/ngrok to browser SpeechRecognition | 2026-04-05 |
+| ✓ | Discover page restored — 4 curated sections, skeleton loading, "Talk to Pine →" CTA | 2026-04-05 |
+| ✓ | B-06: SerpAPI key invalid — resolved, new key confirmed working | 2026-04-07 |
+| ✓ | E2: Orb halo speaking animation — rAF loop, lerp, asymmetric attack/release | 2026-04-08 |
+| ✓ | Web Audio API wired to Inworld TTS for live volume feedback | 2026-04-08 |
+| ✓ | Mic flash on conversation → home fix — stopVoice() cleanup on unmount | 2026-04-08 |
+| ✓ | skipClarification flag — chip clicks and initial URL query bypass clarification gate | 2026-04-08 |
+| ✓ | SerpAPI result count capped — MAX_RESULTS_PER_QUERY = 10 in route.ts | 2026-04-08 |
+| ✓ | D6: Intent-match explanation generation — `generateExplanations()` wired to ProductCard | 2026-04-10 |
+| ✓ | Placeholder cycling animation in hero.jsx — 8 phrases, 1500ms fade cycle | 2026-04-10 |
+| ✓ | ldrs dotPulse loader in orb.jsx — replaces waveform bars during isProcessing | 2026-04-10 |
+| ✓ | Flash fixes (4): pineResponse flash, idle copy reappearance, subtitle reappearance, "No results" on mount | 2026-04-10 |
+| ✓ | pineHandoff extended to carry products array — eliminates conversation page mount API call | 2026-04-10 |
+| ✓ | API economics modeled — Serper confirmed as SerpAPI replacement, DataForSEO assigned to batch role, own catalog confirmed as only architecture with fixed-cost retrieval | 2026-04-10 |
 
 ---
 

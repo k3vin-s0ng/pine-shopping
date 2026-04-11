@@ -2,7 +2,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export default function InputBar({ interimValue = "", micActive = false }) {
+export default function InputBar({
+  interimValue = "",
+  micActive = false,
+  onSubmit,
+  isLoading = false,
+  clarificationQuestion = null,
+}) {
   const [text, setText] = useState("");
   const router = useRouter();
 
@@ -11,8 +17,13 @@ export default function InputBar({ interimValue = "", micActive = false }) {
 
   function handleSubmit() {
     const query = text.trim();
-    if (!query) return;
-    router.push(`/conversation?q=${encodeURIComponent(query)}`);
+    if (!query || isLoading) return;
+    if (onSubmit) {
+      setText("");
+      onSubmit(query);
+    } else {
+      router.push(`/conversation?q=${encodeURIComponent(query)}`);
+    }
   }
 
   function handleChange(e) {
@@ -37,20 +48,40 @@ export default function InputBar({ interimValue = "", micActive = false }) {
       </button>
 
       <div className="input-wrap">
+        {clarificationQuestion && (
+          <div className="clarification-bubble">
+            {clarificationQuestion}
+          </div>
+        )}
         <input
           id="mainInput"
           className="main-input"
           value={inputDisplayValue}
           onChange={handleChange}
           onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-          placeholder={micActive ? "Listening…" : "Tell Pine what you're looking for…"}
-          readOnly={micActive}
+          placeholder={
+            isLoading
+              ? "Pine is thinking…"
+              : clarificationQuestion
+              ? "Type your answer…"
+              : micActive
+              ? "Listening…"
+              : "Tell Pine what you're looking for…"
+          }
+          readOnly={micActive || isLoading}
         />
-        <button className="send-btn" onClick={handleSubmit}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="22" y1="2" x2="11" y2="13" />
-            <polygon points="22 2 15 22 11 13 2 9 22 2" />
-          </svg>
+        <button className="send-btn" onClick={handleSubmit} disabled={isLoading}>
+          {isLoading ? (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="spin">
+              <circle cx="12" cy="12" r="10" strokeOpacity="0.3" />
+              <path d="M12 2a10 10 0 0 1 10 10" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="22" y1="2" x2="11" y2="13" />
+              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
+          )}
         </button>
       </div>
 

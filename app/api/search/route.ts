@@ -3,10 +3,10 @@ import { OpenAI } from "openai";
 import { extractIntent } from "@/app/lib/intentExtraction";
 import { Product } from "@/app/lib/products";
 
-const SERP_API_KEY = process.env.SERP_API_KEY;
+const SERP_API_KEY = process.env.SERP_API_KEY; // retained for resolveRetailerUrls body (disabled call)
+const SERPER_API_KEY = process.env.SERPER_API_KEY;
 const SEARCH_VARIANT_COUNT = 3;
-const RESULTS_PER_QUERY = 10; // note: google_shopping engine ignores num — slice applied post-fetch
-const MAX_RESULTS_PER_QUERY = 10; // hard cap applied after fetch since SerpAPI ignores num
+const MAX_RESULTS_PER_QUERY = 10;
   
 const openai = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
@@ -100,27 +100,102 @@ function buildSearchQueries(baseQuery: string, intent: any): string[] {
 }
 
 async function callSerpAPI(searchQuery: string): Promise<any[]> {
-  const url = new URL("https://serpapi.com/search");
-  url.searchParams.set("engine", "google_shopping");
-  url.searchParams.set("q", searchQuery);
-  url.searchParams.set("api_key", SERP_API_KEY!);
-  url.searchParams.set("num", String(RESULTS_PER_QUERY));
+  const res = await fetch('https://google.serper.dev/shopping', {
+    method: 'POST',
+    headers: {
+      'X-API-KEY': SERPER_API_KEY!,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      q: searchQuery,
+      num: 10,
+      gl: 'us',
+      hl: 'en',
+    }),
+  });
 
-  const response = await fetch(url.toString());
-  const data = await response.json();
-
-  if (data.error) {
-    console.error("[SerpAPI] Error:", data.error);
-    throw new Error(data.error);
+  if (!res.ok) {
+    console.error(`[Serper] Error: ${res.status} ${res.statusText}`);
+    return [];
   }
 
-  const results = data.shopping_results || [];
-  if (results.length > 0) {
-    console.log("[SerpAPI] results[0]:", JSON.stringify(results[0], null, 2));
-  }
-
+  const data = await res.json();
+  const results = data.shopping ?? [];
   return results.slice(0, MAX_RESULTS_PER_QUERY);
 }
+
+// Serper's item.link is always a Google Shopping URL — not a direct retailer link.
+// This map constructs a direct retailer search URL from source + title.
+// Unknown retailers fall back to a Google web search (surfaces direct product links as top results).
+const RETAILER_SEARCH: Record<string, (t: string) => string> = {
+  'amazon':          (t) => `https://www.amazon.com/s?k=${encodeURIComponent(t)}`,
+  'target':          (t) => `https://www.target.com/s?searchTerm=${encodeURIComponent(t)}`,
+  'walmart':         (t) => `https://www.walmart.com/search?q=${encodeURIComponent(t)}`,
+  'best buy':        (t) => `https://www.bestbuy.com/site/searchpage.jsp?st=${encodeURIComponent(t)}`,
+  'nordstrom':       (t) => `https://www.nordstrom.com/sr?origin=keywordsearch&keyword=${encodeURIComponent(t)}`,
+  'old navy':        (t) => `https://www.oldnavy.com/browse/search.do?searchText=${encodeURIComponent(t)}`,
+  'gap':             (t) => `https://www.gap.com/browse/search.do?searchText=${encodeURIComponent(t)}`,
+  'banana republic': (t) => `https://www.bananarepublic.com/browse/search.do?searchText=${encodeURIComponent(t)}`,
+  "macy's":          (t) => `https://www.macys.com/shop/search?keyword=${encodeURIComponent(t)}`,
+  'macys':           (t) => `https://www.macys.com/shop/search?keyword=${encodeURIComponent(t)}`,
+  "dillard's":       (t) => `https://www.dillards.com/search?searchString=${encodeURIComponent(t)}`,
+  'dillards':        (t) => `https://www.dillards.com/search?searchString=${encodeURIComponent(t)}`,
+  "men's wearhouse": (t) => `https://www.menswearhouse.com/search?q=${encodeURIComponent(t)}`,
+  'tommy bahama':    (t) => `https://www.tommybahama.com/search?q=${encodeURIComponent(t)}`,
+  'ralph lauren':    (t) => `https://www.ralphlauren.com/search?q=${encodeURIComponent(t)}`,
+  'abercrombie':     (t) => `https://www.abercrombie.com/shop/us/search?q=${encodeURIComponent(t)}`,
+  'uniqlo':          (t) => `https://www.uniqlo.com/us/en/search?q=${encodeURIComponent(t)}`,
+  'zara':            (t) => `https://www.zara.com/us/en/search?searchTerm=${encodeURIComponent(t)}`,
+  'h&m':             (t) => `https://www2.hm.com/en_us/search-results.html?q=${encodeURIComponent(t)}`,
+  'etsy':            (t) => `https://www.etsy.com/search?q=${encodeURIComponent(t)}`,
+  'wayfair':         (t) => `https://www.wayfair.com/keyword.php?keyword=${encodeURIComponent(t)}`,
+  'home depot':      (t) => `https://www.homedepot.com/s/${encodeURIComponent(t)}`,
+  'lowe\'s':         (t) => `https://www.lowes.com/search?searchTerm=${encodeURIComponent(t)}`,
+  'costco':          (t) => `https://www.costco.com/CatalogSearch?keyword=${encodeURIComponent(t)}`,
+  'ebay':            (t) => `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(t)}`,
+};
+
+function isDirectRetailerUrl(url: string): boolean {
+  if (!url) return false;
+  try {
+    const hostname = new URL(url).hostname;
+    return !hostname.includes('google.com');
+  } catch {
+    return false;
+  }
+}
+
+function buildRetailerUrl(source: string, title: string, originalLink: string): string {
+  // Serper sometimes returns direct retailer URLs — use them as-is
+  if (isDirectRetailerUrl(originalLink)) return originalLink;
+
+  // Google Shopping URL: try to build a retailer-specific search URL instead
+  const key = source.toLowerCase().trim();
+  for (const [retailer, fn] of Object.entries(RETAILER_SEARCH)) {
+    if (key.includes(retailer)) return fn(title);
+  }
+
+  // Unknown retailer with no direct URL: fall back to Google Shopping (better than a web search)
+  return originalLink;
+}
+
+function mapSerperResult(item: any): any {
+  const source = item.source ?? '';
+  const title = item.title ?? '';
+  const originalLink = item.link ?? '';
+  return {
+    title,
+    price: item.price ?? '',
+    thumbnail: item.imageUrl ?? '',
+    source,
+    product_link: buildRetailerUrl(source, title, originalLink),
+    rating: item.rating ?? null,
+    reviews: item.ratingCount ?? null,
+    product_id: item.productId ?? null,
+    serpapi_immersive_product_api: null,
+  };
+}
+
 
 async function callSerpAPIBatch(queries: string[]): Promise<any[]> {
   const settled = await Promise.allSettled(queries.map((q) => callSerpAPI(q)));
@@ -128,15 +203,15 @@ async function callSerpAPIBatch(queries: string[]): Promise<any[]> {
   const merged: any[] = [];
   settled.forEach((result, index) => {
     if (result.status === "fulfilled") {
-      merged.push(...result.value);
+      merged.push(...result.value.map(mapSerperResult));
     } else {
-      console.warn(`[SerpAPI] Query failed: ${queries[index]}`, result.reason);
+      console.warn(`[Serper] Query failed: ${queries[index]}`, result.reason);
     }
   });
 
   const seen = new Set<string>();
   return merged.filter((item) => {
-    const key = (item.link || item.product_link || item.title || "").toLowerCase().trim();
+    const key = (item.product_link || item.title || "").toLowerCase().trim();
     if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -151,12 +226,15 @@ function transformProducts(items: any[]): Product[] {
       item.snippet ||
       `Sold by ${item.source || "online store"}${item.delivery ? ` · ${item.delivery}` : ""}`,
     price: item.price || "$0",
-    num: typeof item.extracted_price === "number" ? item.extracted_price : 0,
+    num: typeof item.extracted_price === "number"
+      ? item.extracted_price
+      : parseFloat(String(item.price ?? "").replace(/[^0-9.]/g, "")) || 0,
     rating: typeof item.rating === "number" ? String(item.rating) : "0",
     reviews: typeof item.reviews === "number" ? formatReviews(item.reviews) : "0",
     match: `${Math.max(60, 99 - i * 3)}%`,
     img: item.thumbnail || "",
     link: item.product_link || "",
+    product_id: item.product_id ?? null,
     affiliate_degraded: item.affiliate_degraded ?? false,
     explanation: item.explanation ?? undefined,
   }));
@@ -217,8 +295,8 @@ export async function POST(request: NextRequest) {
   }
 
   if (!query) return NextResponse.json({ error: "Query required" }, { status: 400 });
-  if (!SERP_API_KEY) {
-    return NextResponse.json({ error: "SERP_API_KEY not configured" }, { status: 500 });
+  if (!SERPER_API_KEY) {
+    return NextResponse.json({ error: "SERPER_API_KEY not configured" }, { status: 500 });
   }
 
   const intent = await extractIntent(query, history);
@@ -273,9 +351,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const resolvedItems = rawItems;
-  // resolveRetailerUrls temporarily disabled — re-enable before demo
+  // [AFFILIATE - D10] resolveRetailerUrls() disabled pending Skimlinks/catalog integration.
+  // Serper returns direct retailer URLs on item.link in most cases.
+  // Uncomment when Kevin's catalog provides direct retailer URLs as first-class field,
+  // or when Skimlinks server-side wrapping is implemented.
+  //
   // const resolvedItems = await resolveRetailerUrls(rawItems);
+  console.log('[affiliate] resolveRetailerUrls disabled — affiliate_degraded: true for all results');
+  const resolvedItems = rawItems;
 
   const products = transformProducts(resolvedItems);
   const { budget_ceiling, budget_floor, must_have_attributes } = intent.hard_constraints;
@@ -310,6 +393,11 @@ export async function POST(request: NextRequest) {
   const chatResponse = !priceFilterApplied
     ? "Here are the closest options I found."
     : intent.chat_response || "Here are the best matches I found for you!";
+
+  // D10-partial: resolveTop3Urls() disabled — Serper /shopping does not support product detail mode.
+  // Passing productId is not a supported param; results still return google.com links.
+  // Re-enable when Kevin's catalog provides direct retailer URLs as a first-class field (D10-full).
+  // filteredProducts = await resolveTop3Urls(filteredProducts);
 
   // D6: Attach explanations by position to top 3 products
   if (explanations.length > 0) {

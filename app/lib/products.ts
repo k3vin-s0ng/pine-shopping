@@ -10,6 +10,7 @@ export interface Product {
   match: string;
   img: string;
   link: string;
+  product_id?: string | null;   // Serper productId — used by resolveTop3Urls for direct URL resolution
   affiliate_degraded?: boolean;
   explanation?: string;
 }

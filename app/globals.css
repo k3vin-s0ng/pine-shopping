@@ -412,6 +412,47 @@ body {
 .main-input::placeholder { color: var(--muted); }
 .main-input:focus { border-color: var(--pine-mid); box-shadow: 0 0 0 3px rgba(30,64,48,0.09); }
 
+.clarification-bubble {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  right: 0;
+  background: var(--warm-white);
+  border: 1.5px solid var(--pine-mid);
+  border-radius: 16px;
+  padding: 12px 18px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  color: var(--pine);
+  box-shadow: 0 4px 18px rgba(30,64,48,0.10);
+  animation: bubbleFadeIn 0.2s ease;
+  pointer-events: none;
+}
+.clarification-bubble::after {
+  content: "";
+  position: absolute;
+  bottom: -8px;
+  left: 28px;
+  width: 14px;
+  height: 8px;
+  background: var(--warm-white);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  border-left: 1.5px solid var(--pine-mid);
+  border-right: 1.5px solid var(--pine-mid);
+}
+@keyframes bubbleFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.send-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.send-btn:disabled:hover { background: var(--pine); transform: translateY(-50%); }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.spin { animation: spin 0.8s linear infinite; }
+
 .send-btn {
   position: absolute;
   right: 7px;
