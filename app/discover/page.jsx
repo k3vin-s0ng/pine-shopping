@@ -38,7 +38,7 @@ export default function DiscoverPage() {
         fetch("/api/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: section.query, history: [], accumulatedIntent: null }),
+          body: JSON.stringify({ query: section.query, history: [], accumulatedIntent: null, skipClarification: true }),
         })
           .then(r => r.json())
           .then(data => ({ i, products: data.products || [], error: false }))
