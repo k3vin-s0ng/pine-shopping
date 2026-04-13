@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { OpenAI } from "openai";
-import { extractIntent } from "@/app/lib/intentExtraction";
+import { extractIntent, IntentExtractionResult } from "@/app/lib/intentExtraction";
 import { Product } from "@/app/lib/products";
 
 const SERP_API_KEY = process.env.SERP_API_KEY; // retained for resolveRetailerUrls body (disabled call)
@@ -87,6 +87,132 @@ function formatReviews(n: number): string {
   return String(n);
 }
 
+// Extracts a numeric price from Serper's price string (e.g. "$1,299.99" → 1299.99)
+// Returns null if unparseable — callers must handle null explicitly
+function parsePrice(priceStr: string | null | undefined): number | null {
+  if (!priceStr) return null;
+  const cleaned = priceStr.replace(/[^0-9.]/g, '');
+  const parsed = parseFloat(cleaned);
+  return isNaN(parsed) ? null : parsed;
+}
+
+// Parses Product.reviews formatted string back to a number ("1.2k" → 1200, "0" → 0)
+function parseReviewCount(reviewStr: string | null | undefined): number {
+  if (!reviewStr) return 0;
+  const s = reviewStr.trim().toLowerCase();
+  if (s.endsWith('k')) return Math.round(parseFloat(s) * 1000);
+  return parseInt(s) || 0;
+}
+
+// [D5-interim] Scores a single product against the user's extracted intent.
+// Uses only fields available from Serper's shopping response.
+// Returns a numeric score — higher is better. No floor or ceiling.
+// Will be replaced by full utility scoring against Kevin's enriched result
+// objects (K5) in Phase 2.
+function scoreProduct(
+  product: Product,
+  intent: IntentExtractionResult,
+  queryRank: number  // 0 = primary query, 1 = first related, 2 = second related
+): number {
+  let score = 0;
+  const price = parsePrice(product.price);
+  const nameLower = (product.name ?? '').toLowerCase();
+
+  // --- Hard constraint: budget ceiling ---
+  // Hard violation — push well below any compliant product
+  if (intent.hard_constraints?.budget_ceiling != null) {
+    if (price != null && price <= intent.hard_constraints.budget_ceiling) {
+      score += 30;
+    } else if (price != null) {
+      score -= 100; // hard violation — deprioritise regardless of other signals
+    }
+    // price === null: no penalty, no reward — unknown price is neutral
+  }
+
+  // --- Hard constraint: budget floor ---
+  if (intent.hard_constraints?.budget_floor != null && price != null) {
+    if (price >= intent.hard_constraints.budget_floor) {
+      score += 10;
+    } else {
+      score -= 40;
+    }
+  }
+
+  // --- Hard constraint: must_have_attributes (name match) ---
+  // This is a proxy — real attribute matching requires Kevin's structured specs.
+  // Rewarded per matching attribute found in product name.
+  for (const attr of intent.hard_constraints?.must_have_attributes ?? []) {
+    if (nameLower.includes(attr.toLowerCase())) {
+      score += 20;
+    }
+  }
+
+  // --- Soft preference: vibe_keywords (name match) ---
+  // Lower weight than hard constraints — these are preferences, not requirements.
+  for (const kw of intent.soft_preferences?.vibe_keywords ?? []) {
+    if (nameLower.includes(kw.toLowerCase())) {
+      score += 8;
+    }
+  }
+
+  // --- Soft preference: quality_priority ---
+  // High quality priority → reward higher-rated products more aggressively
+  const qualityMultiplier =
+    intent.soft_preferences?.quality_priority === 'high' ? 6 :
+    intent.soft_preferences?.quality_priority === 'low'  ? 2 : 4;
+
+  const ratingNum = parseFloat(product.rating ?? '0');
+  if (!isNaN(ratingNum) && ratingNum > 0) {
+    score += ratingNum * qualityMultiplier; // max +30 at 5.0 rating, high quality
+  }
+
+  // --- Review volume — trust signal ---
+  // Diminishing returns: 100+ reviews earns +5, 1000+ earns another +5
+  const reviews = parseReviewCount(product.reviews);
+  if (reviews > 100)  score += 5;
+  if (reviews > 1000) score += 5;
+
+  // --- Query source weight ---
+  // Primary query is the most precise expression of user intent.
+  // Penalise related query results slightly so ties break in favour of primary.
+  score -= queryRank * 5;
+
+  return score;
+}
+
+// [D5-interim] Scores all products and returns them sorted highest-score-first.
+// queryOrigins maps each product's name to its query rank (0/1/2).
+// Products with identical scores retain their original relative order (stable sort).
+function scoreAndRankProducts(
+  products: Product[],
+  intent: IntentExtractionResult,
+  queryOrigins: Map<string, number>
+): Product[] {
+  const scored = products.map((product) => ({
+    product,
+    score: scoreProduct(
+      product,
+      intent,
+      queryOrigins.get(product.name) ?? 1 // default to related-query weight if unknown
+    ),
+  }));
+
+  // Log top 5 scores for observability — remove in Phase 2 when D5-full replaces this
+  const top5 = [...scored]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
+  console.log('[D5-interim scores]', top5.map(s => ({
+    title: s.product.name.slice(0, 40),
+    score: s.score,
+    price: s.product.price,
+    rating: s.product.rating,
+  })));
+
+  return scored
+    .sort((a, b) => b.score - a.score)
+    .map(s => s.product);
+}
+
 function buildSearchQueries(baseQuery: string, intent: any): string[] {
   const related = Array.isArray(intent?.related_search_queries)
     ? intent.related_search_queries
@@ -124,71 +250,14 @@ async function callSerpAPI(searchQuery: string): Promise<any[]> {
   return results.slice(0, MAX_RESULTS_PER_QUERY);
 }
 
-// Serper's item.link is always a Google Shopping URL — not a direct retailer link.
-// This map constructs a direct retailer search URL from source + title.
-// Unknown retailers fall back to a Google web search (surfaces direct product links as top results).
-const RETAILER_SEARCH: Record<string, (t: string) => string> = {
-  'amazon':          (t) => `https://www.amazon.com/s?k=${encodeURIComponent(t)}`,
-  'target':          (t) => `https://www.target.com/s?searchTerm=${encodeURIComponent(t)}`,
-  'walmart':         (t) => `https://www.walmart.com/search?q=${encodeURIComponent(t)}`,
-  'best buy':        (t) => `https://www.bestbuy.com/site/searchpage.jsp?st=${encodeURIComponent(t)}`,
-  'nordstrom':       (t) => `https://www.nordstrom.com/sr?origin=keywordsearch&keyword=${encodeURIComponent(t)}`,
-  'old navy':        (t) => `https://www.oldnavy.com/browse/search.do?searchText=${encodeURIComponent(t)}`,
-  'gap':             (t) => `https://www.gap.com/browse/search.do?searchText=${encodeURIComponent(t)}`,
-  'banana republic': (t) => `https://www.bananarepublic.com/browse/search.do?searchText=${encodeURIComponent(t)}`,
-  "macy's":          (t) => `https://www.macys.com/shop/search?keyword=${encodeURIComponent(t)}`,
-  'macys':           (t) => `https://www.macys.com/shop/search?keyword=${encodeURIComponent(t)}`,
-  "dillard's":       (t) => `https://www.dillards.com/search?searchString=${encodeURIComponent(t)}`,
-  'dillards':        (t) => `https://www.dillards.com/search?searchString=${encodeURIComponent(t)}`,
-  "men's wearhouse": (t) => `https://www.menswearhouse.com/search?q=${encodeURIComponent(t)}`,
-  'tommy bahama':    (t) => `https://www.tommybahama.com/search?q=${encodeURIComponent(t)}`,
-  'ralph lauren':    (t) => `https://www.ralphlauren.com/search?q=${encodeURIComponent(t)}`,
-  'abercrombie':     (t) => `https://www.abercrombie.com/shop/us/search?q=${encodeURIComponent(t)}`,
-  'uniqlo':          (t) => `https://www.uniqlo.com/us/en/search?q=${encodeURIComponent(t)}`,
-  'zara':            (t) => `https://www.zara.com/us/en/search?searchTerm=${encodeURIComponent(t)}`,
-  'h&m':             (t) => `https://www2.hm.com/en_us/search-results.html?q=${encodeURIComponent(t)}`,
-  'etsy':            (t) => `https://www.etsy.com/search?q=${encodeURIComponent(t)}`,
-  'wayfair':         (t) => `https://www.wayfair.com/keyword.php?keyword=${encodeURIComponent(t)}`,
-  'home depot':      (t) => `https://www.homedepot.com/s/${encodeURIComponent(t)}`,
-  'lowe\'s':         (t) => `https://www.lowes.com/search?searchTerm=${encodeURIComponent(t)}`,
-  'costco':          (t) => `https://www.costco.com/CatalogSearch?keyword=${encodeURIComponent(t)}`,
-  'ebay':            (t) => `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(t)}`,
-};
-
-function isDirectRetailerUrl(url: string): boolean {
-  if (!url) return false;
-  try {
-    const hostname = new URL(url).hostname;
-    return !hostname.includes('google.com');
-  } catch {
-    return false;
-  }
-}
-
-function buildRetailerUrl(source: string, title: string, originalLink: string): string {
-  // Serper sometimes returns direct retailer URLs — use them as-is
-  if (isDirectRetailerUrl(originalLink)) return originalLink;
-
-  // Google Shopping URL: try to build a retailer-specific search URL instead
-  const key = source.toLowerCase().trim();
-  for (const [retailer, fn] of Object.entries(RETAILER_SEARCH)) {
-    if (key.includes(retailer)) return fn(title);
-  }
-
-  // Unknown retailer with no direct URL: fall back to Google Shopping (better than a web search)
-  return originalLink;
-}
 
 function mapSerperResult(item: any): any {
-  const source = item.source ?? '';
-  const title = item.title ?? '';
-  const originalLink = item.link ?? '';
   return {
-    title,
+    title: item.title ?? '',
     price: item.price ?? '',
     thumbnail: item.imageUrl ?? '',
-    source,
-    product_link: buildRetailerUrl(source, title, originalLink),
+    source: item.source ?? '',
+    product_link: item.link ?? '',
     rating: item.rating ?? null,
     reviews: item.ratingCount ?? null,
     product_id: item.productId ?? null,
@@ -197,25 +266,32 @@ function mapSerperResult(item: any): any {
 }
 
 
-async function callSerpAPIBatch(queries: string[]): Promise<any[]> {
-  const settled = await Promise.allSettled(queries.map((q) => callSerpAPI(q)));
-
-  const merged: any[] = [];
-  settled.forEach((result, index) => {
-    if (result.status === "fulfilled") {
-      merged.push(...result.value.map(mapSerperResult));
-    } else {
-      console.warn(`[Serper] Query failed: ${queries[index]}`, result.reason);
-    }
-  });
+async function callSerpAPIBatch(
+  queries: string[]
+): Promise<{ items: any[]; queryOrigins: Map<string, number> }> {
+  const results = await Promise.all(
+    queries.map((query, index) =>
+      callSerpAPI(query).then((products) =>
+        products.map((p) => ({ item: mapSerperResult(p), queryRank: index }))
+      )
+    )
+  );
 
   const seen = new Set<string>();
-  return merged.filter((item) => {
-    const key = (item.product_link || item.title || "").toLowerCase().trim();
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const merged: any[] = [];
+  const queryOrigins = new Map<string, number>();
+
+  for (const batch of results) {
+    for (const { item, queryRank } of batch) {
+      const key = (item.title || '').toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(item);
+      queryOrigins.set(item.title, queryRank);
+    }
+  }
+
+  return { items: merged, queryOrigins };
 }
 
 function transformProducts(items: any[]): Product[] {
@@ -239,6 +315,7 @@ function transformProducts(items: any[]): Product[] {
     explanation: item.explanation ?? undefined,
   }));
 }
+
 
 // D6: Fires in parallel with callSerpAPIBatch — takes only the intent summary so it
 // can start before products are known. Returns 3 intent-framing sentences by position.
@@ -320,12 +397,16 @@ export async function POST(request: NextRequest) {
 
   // D6 fires in parallel with SerpAPI — uses only intent summary, no product names needed
   let rawItems: any[];
+  let queryOrigins: Map<string, number>;
   let explanations: string[];
   try {
-    [rawItems, explanations] = await Promise.all([
+    let batchResult: { items: any[]; queryOrigins: Map<string, number> };
+    [batchResult, explanations] = await Promise.all([
       callSerpAPIBatch(searchQueries),
       generateExplanations(intent.raw_intent_summary),
     ]);
+    rawItems = batchResult.items;
+    queryOrigins = batchResult.queryOrigins;
 
     if (rawItems.length === 0) {
       console.warn("[POST /api/search] SerpAPI returned 0 results for queries:", searchQueries);
@@ -361,9 +442,13 @@ export async function POST(request: NextRequest) {
   const resolvedItems = rawItems;
 
   const products = transformProducts(resolvedItems);
+
+  // [D5-interim] Reorder by constraint satisfaction + quality signals
+  const rankedProducts = scoreAndRankProducts(products, intent, queryOrigins);
+
   const { budget_ceiling, budget_floor, must_have_attributes } = intent.hard_constraints;
 
-  let filteredProducts = [...products];
+  let filteredProducts = [...rankedProducts];
 
   if (budget_ceiling) {
     filteredProducts = filteredProducts.filter((p) => p.num > 0 && p.num <= budget_ceiling);
@@ -394,10 +479,9 @@ export async function POST(request: NextRequest) {
     ? "Here are the closest options I found."
     : intent.chat_response || "Here are the best matches I found for you!";
 
-  // D10-partial: resolveTop3Urls() disabled — Serper /shopping does not support product detail mode.
-  // Passing productId is not a supported param; results still return google.com links.
-  // Re-enable when Kevin's catalog provides direct retailer URLs as a first-class field (D10-full).
-  // filteredProducts = await resolveTop3Urls(filteredProducts);
+  // [D10-partial disabled] SerpAPI google_immersive_product requires a page_token from SerpAPI's
+  // own shopping results — not compatible with Serper's productId. Direct product page URLs
+  // will be available when Kevin's catalog provides them as a first-class field (D10-full).
 
   // D6: Attach explanations by position to top 3 products
   if (explanations.length > 0) {

@@ -1,6 +1,6 @@
 # Pine — Product Roadmap
 
-_Last updated: 2026-04-10 (Serper.dev switch, Skimlinks interim affiliate, product catalog index moved to Phase 2, DataForSEO assigned to batch catalog role, API economics modeled)_
+_Last updated: 2026-04-12 (D5-interim shipped — lightweight utility scoring on Serper fields; D5-full deferred to Phase 2 pending K5)_
 
 ---
 
@@ -48,7 +48,8 @@ The goal is to upgrade Pine from Level 3.5 (single intent extraction call + Serp
 - [x] D2: Intent confidence scoring (0.0–1.0 threshold gates clarification vs. search)
 - [x] D3: Multi-turn clarification loop — preference accumulator (`accumulatedIntent`) merges constraints across turns; ACCUMULATION RULE + refinement-turn confidence floor added to prompt
 - [x] D4: Dialog adaptation by user expertise level — `user_expertise` field + USER EXPERTISE CLASSIFICATION section in prompt; clarification question style adapts per level
-- [ ] D5: Personalized utility scoring against soft preference vector — blocked on K5 (enriched result objects)
+- [x] **D5-interim: Lightweight utility scoring (Serper fields only)** — `scoreProduct()` + `scoreAndRankProducts()` wired into route. Budget hard violation -100, attribute/keyword title match, quality-priority-weighted rating, review volume trust signal, query origin weight. _(Complete 2026-04-12)_
+- [ ] D5-full: Full utility scoring against Kevin's K5 enriched result objects — specs, review_signals, structured attributes. Blocked on K-catalog-1 + K5.
 - [x] D6: Intent-match explanation generation per top 3 results — `generateExplanations()` wired to `ProductCard` via `reason` prop
 - [ ] D7: Constraint relaxation logic when Data Agent returns sparse results
 - [ ] D8: Confident single recommendation mode (when top result significantly outscores others)
@@ -176,6 +177,7 @@ The long-term product vision is payment completing on Pine with direct retailer 
 | 2026-04-11 | **Top-3 URL resolution via Serper product detail call (D10-partial)** | `resolveTop3Urls()` fires 3 parallel Serper calls after filtering, querying by `productId` + title. Limits resolution to exactly 3 calls per turn regardless of result count. Products 4+ degrade gracefully to Google Shopping URL. Full resolution replaced by catalog direct URLs (D10-full) once K-catalog-1 is live — eliminating the second API call entirely. `product_id` added to `Product` interface to survive `transformProducts()`. |
 | 2026-04-10 | **Product catalog index moved to Phase 2** | "Kevin's database" was collapsed into one Phase 4 line item covering both catalog retrieval and user persistence. These are different systems. Catalog index (vector store, ~50K products, HNSW retrieval) is Phase 2 — it unblocks cheap retrieval, direct URLs, and D5. User database (sessions, personalization, auth) stays Phase 4. |
 | 2026-04-10 | **API economics modeled — own database confirmed as only architecture where costs don't scale with usage** | At 5K MAU: SerpAPI ~$405/mo API cost vs. $506 affiliate revenue (20% margin). Serper: ~$81/mo (84% margin). Own DB: ~$40/mo fixed regardless of MAU (92% margin). Own DB break-even on build cost (~$50 one-time) measured in days once live. |
+| 2026-04-12 | **D5-interim shipped using Serper fields only** | Top 3 ordering must reflect user intent, not Serper's native ranking. Hard constraint violations deprioritised with -100 penalty. Attribute and keyword title matches rewarded (+20/+8). Rating weighted by quality_priority preference. Review volume as trust signal. Query origin penalises related-query results in ties. Direct URL resolution remains disabled. Full D5 deferred to Phase 2 pending Kevin's K5 enriched result objects. |
 | 2026-04-10 | **Reddit data strategy clarified** | ChatGPT/LLMs don't query Reddit in real time — it's training data. For Pine: scrape 3–5 category-relevant subreddits (r/BuyItForLife, r/frugalmalefashion, etc.) in batch, extract structured product recommendation signals, store as `review_signals` in catalog. Not a real-time retrieval path. Scoped to Phase 4 enrichment layer. |
 
 ---
