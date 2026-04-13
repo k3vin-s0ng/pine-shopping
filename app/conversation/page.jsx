@@ -8,7 +8,7 @@ import ProductGrid from "../components/conversation/ProductGrid";
 import BottomBar from "../components/conversation/BottomBar";
 import { useVoiceRecorder } from "../lib/useVoiceRecorder";
 import { speakWithInworld } from "../lib/tts/inworldTTS";
-
+ 
 function ConversationView() {
   const searchParams = useSearchParams();
   const router = useRouter();
