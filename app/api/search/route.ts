@@ -3,11 +3,9 @@ import { OpenAI } from "openai";
 import { extractIntent, IntentExtractionResult } from "@/app/lib/intentExtraction";
 import { Product } from "@/app/lib/products";
 
-const SERP_API_KEY = process.env.SERP_API_KEY; // retained for resolveRetailerUrls body (disabled call)
-const SERPER_API_KEY = process.env.SERPER_API_KEY;
 const SEARCH_VARIANT_COUNT = 3;
 const MAX_RESULTS_PER_QUERY = 10;
-  
+
 const openai = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -42,6 +40,8 @@ function pickBestSeller(sellers: OnlineSeller[]): OnlineSeller | null {
   return sellers[0];
 }
 
+// [AFFILIATE - D10] resolveRetailerUrls() runs on all products — cost-prohibitive at scale.
+// Kept for reference. Do not call. Direct URLs are handled by resolveTop3Urls() (top 3 only).
 async function resolveRetailerUrls(rawItems: any[]): Promise<any[]> {
   const resolved = await Promise.all(
     rawItems.map(async (item) => {
@@ -50,7 +50,7 @@ async function resolveRetailerUrls(rawItems: any[]): Promise<any[]> {
       }
 
       try {
-        const urlWithKey = `${item.serpapi_immersive_product_api}&api_key=${SERP_API_KEY}`;
+        const urlWithKey = `${item.serpapi_immersive_product_api}&api_key=${process.env.SERPAPI_API_KEY}`;
         const response = await fetch(urlWithKey);
         const data = await response.json();
 
@@ -87,7 +87,7 @@ function formatReviews(n: number): string {
   return String(n);
 }
 
-// Extracts a numeric price from Serper's price string (e.g. "$1,299.99" → 1299.99)
+// Extracts a numeric price from a price string (e.g. "$1,299.99" → 1299.99)
 // Returns null if unparseable — callers must handle null explicitly
 function parsePrice(priceStr: string | null | undefined): number | null {
   if (!priceStr) return null;
@@ -105,7 +105,7 @@ function parseReviewCount(reviewStr: string | null | undefined): number {
 }
 
 // [D5-interim] Scores a single product against the user's extracted intent.
-// Uses only fields available from Serper's shopping response.
+// Uses only fields available from SerpAPI's shopping response.
 // Returns a numeric score — higher is better. No floor or ceiling.
 // Will be replaced by full utility scoring against Kevin's enriched result
 // objects (K5) in Phase 2.
@@ -225,46 +225,79 @@ function buildSearchQueries(baseQuery: string, intent: any): string[] {
   return [...new Set(queries)].slice(0, SEARCH_VARIANT_COUNT);
 }
 
+// [SERPER - D9] Serper implementation preserved — direct retailer URL resolution
+// could not be reliably achieved via Serper's product detail endpoint.
+// Reinstate when Serper linking issue is resolved.
+//
+// async function callSerpAPI(searchQuery: string): Promise<any[]> {
+//   const res = await fetch('https://google.serper.dev/shopping', {
+//     method: 'POST',
+//     headers: {
+//       'X-API-KEY': process.env.SERPER_API_KEY!,
+//       'Content-Type': 'application/json',
+//     },
+//     body: JSON.stringify({ q: searchQuery, num: 10, gl: 'us', hl: 'en' }),
+//   });
+//   if (!res.ok) {
+//     console.error(`[Serper] Error: ${res.status} ${res.statusText}`);
+//     return [];
+//   }
+//   const data = await res.json();
+//   const results = data.shopping ?? [];
+//   return results.slice(0, MAX_RESULTS_PER_QUERY);
+// }
+
 async function callSerpAPI(searchQuery: string): Promise<any[]> {
-  const res = await fetch('https://google.serper.dev/shopping', {
-    method: 'POST',
-    headers: {
-      'X-API-KEY': SERPER_API_KEY!,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      q: searchQuery,
-      num: 10,
-      gl: 'us',
-      hl: 'en',
-    }),
+  const params = new URLSearchParams({
+    q: searchQuery,
+    tbm: 'shop',
+    api_key: process.env.SERPAPI_API_KEY!,
+    num: String(MAX_RESULTS_PER_QUERY),
+    gl: 'us',
+    hl: 'en',
   });
 
+  const res = await fetch(`https://serpapi.com/search?${params}`);
+
   if (!res.ok) {
-    console.error(`[Serper] Error: ${res.status} ${res.statusText}`);
+    console.error(`[SerpAPI] error: ${res.status} ${res.statusText}`);
     return [];
   }
 
   const data = await res.json();
-  const results = data.shopping ?? [];
-  return results.slice(0, MAX_RESULTS_PER_QUERY);
+  return (data.shopping_results ?? []).slice(0, MAX_RESULTS_PER_QUERY);
 }
 
+// [SERPER - D9] Field mapping for Serper response shape.
+// Preserved for reinstatement when Serper linking issue is resolved.
+//
+// function mapSerperResult(item: any): any {
+//   return {
+//     title: item.title ?? '',
+//     price: item.price ?? '',
+//     thumbnail: item.imageUrl ?? '',
+//     source: item.source ?? '',
+//     product_link: item.link ?? '',
+//     rating: item.rating ?? null,
+//     reviews: item.ratingCount ?? null,
+//     product_id: item.productId ?? null,
+//     serpapi_immersive_product_api: null,
+//   };
+// }
 
-function mapSerperResult(item: any): any {
+function mapSerpAPIResult(item: any): any {
   return {
     title: item.title ?? '',
     price: item.price ?? '',
-    thumbnail: item.imageUrl ?? '',
+    thumbnail: item.thumbnail ?? '',
     source: item.source ?? '',
-    product_link: item.link ?? '',
+    product_link: item.product_link ?? '',
     rating: item.rating ?? null,
-    reviews: item.ratingCount ?? null,
-    product_id: item.productId ?? null,
-    serpapi_immersive_product_api: null,
+    reviews: item.reviews ?? null,
+    product_id: item.product_id ?? null,
+    serpapi_immersive_product_api: item.serpapi_immersive_product_api ?? null,
   };
 }
-
 
 async function callSerpAPIBatch(
   queries: string[]
@@ -272,7 +305,7 @@ async function callSerpAPIBatch(
   const results = await Promise.all(
     queries.map((query, index) =>
       callSerpAPI(query).then((products) =>
-        products.map((p) => ({ item: mapSerperResult(p), queryRank: index }))
+        products.map((p) => ({ item: mapSerpAPIResult(p), queryRank: index }))
       )
     )
   );
@@ -311,11 +344,89 @@ function transformProducts(items: any[]): Product[] {
     img: item.thumbnail || "",
     link: item.product_link || "",
     product_id: item.product_id ?? null,
+    serpapi_immersive_product_api: item.serpapi_immersive_product_api ?? null,
     affiliate_degraded: item.affiliate_degraded ?? false,
     explanation: item.explanation ?? undefined,
   }));
 }
 
+// [D10] Resolves direct retailer URLs for top 3 products only.
+// Uses SerpAPI's serpapi_immersive_product_api field to call the immersive product
+// endpoint, reads product_results.stores, and picks the best direct retailer URL
+// by priority. Fires in parallel for top 3 only after D5 scoring.
+// Falls back to original product link on any failure or missing field.
+const RETAILER_PRIORITY = ['amazon', 'target', 'walmart', 'best buy', 'nordstrom'];
+
+async function resolveTop3Urls(products: Product[]): Promise<Product[]> {
+  const top3 = products.slice(0, 3);
+  const rest = products.slice(3);
+
+  const resolved = await Promise.all(
+    top3.map(async (product) => {
+      if (!product.serpapi_immersive_product_api) {
+        console.warn('[resolveTop3Urls] no immersive API field for:', product.name);
+        return product;
+      }
+
+      try {
+        // serpapi_immersive_product_api URL does not include api_key — must append
+        const url = `${product.serpapi_immersive_product_api}&api_key=${process.env.SERPAPI_API_KEY}`;
+        const res = await fetch(url);
+
+        if (!res.ok) {
+          console.warn('[resolveTop3Urls] immersive call failed:', res.status, product.name);
+          return product;
+        }
+
+        const data = await res.json();
+        const stores: any[] = data.product_results?.stores ?? [];
+
+        if (stores.length === 0) {
+          console.warn('[resolveTop3Urls] no stores returned for:', product.name);
+          return product;
+        }
+
+        // Pick best seller by priority order
+        let directUrl: string | null = null;
+        let retailerName: string | null = null;
+
+        for (const preferred of RETAILER_PRIORITY) {
+          const match = stores.find((s: any) =>
+            (s.name ?? '').toLowerCase().includes(preferred)
+          );
+          if (match?.link) {
+            directUrl = match.link;
+            retailerName = match.name;
+            break;
+          }
+        }
+
+        // Fall back to first available store
+        if (!directUrl && stores[0]?.link) {
+          directUrl = stores[0].link;
+          retailerName = stores[0].name ?? null;
+        }
+
+        if (!directUrl) {
+          console.warn('[resolveTop3Urls] no direct URL found for:', product.name);
+          return product;
+        }
+
+        console.log(`[resolveTop3Urls] ${product.name.slice(0, 40)} → ${retailerName} ${directUrl}`);
+        return {
+          ...product,
+          link: directUrl,
+          cat: retailerName ?? product.cat,
+        };
+      } catch (err) {
+        console.error('[resolveTop3Urls] error for:', product.name, err);
+        return product; // fail safe — return original product unchanged
+      }
+    })
+  );
+
+  return [...resolved, ...rest];
+}
 
 // D6: Fires in parallel with callSerpAPIBatch — takes only the intent summary so it
 // can start before products are known. Returns 3 intent-framing sentences by position.
@@ -363,7 +474,7 @@ Rules:
   }
 }
 
-// POST: LLM intent extraction → expanded SerpAPI query set → filtered products
+// POST: LLM intent extraction → SerpAPI batch → D5 scoring → price/attr filter → D10 URL resolution → attach explanations
 export async function POST(request: NextRequest) {
   const { query, history, accumulatedIntent, skipClarification } = await request.json();
 
@@ -372,8 +483,8 @@ export async function POST(request: NextRequest) {
   }
 
   if (!query) return NextResponse.json({ error: "Query required" }, { status: 400 });
-  if (!SERPER_API_KEY) {
-    return NextResponse.json({ error: "SERPER_API_KEY not configured" }, { status: 500 });
+  if (!process.env.SERPAPI_API_KEY) {
+    return NextResponse.json({ error: "SERPAPI_API_KEY not configured" }, { status: 500 });
   }
 
   const intent = await extractIntent(query, history);
@@ -432,20 +543,13 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // [AFFILIATE - D10] resolveRetailerUrls() disabled pending Skimlinks/catalog integration.
-  // Serper returns direct retailer URLs on item.link in most cases.
-  // Uncomment when Kevin's catalog provides direct retailer URLs as first-class field,
-  // or when Skimlinks server-side wrapping is implemented.
-  //
-  // const resolvedItems = await resolveRetailerUrls(rawItems);
-  console.log('[affiliate] resolveRetailerUrls disabled — affiliate_degraded: true for all results');
-  const resolvedItems = rawItems;
-
-  const products = transformProducts(resolvedItems);
+  const rawProducts = transformProducts(rawItems);
 
   // [D5-interim] Reorder by constraint satisfaction + quality signals
-  const rankedProducts = scoreAndRankProducts(products, intent, queryOrigins);
+  const rankedProducts = scoreAndRankProducts(rawProducts, intent, queryOrigins);
 
+  // Filter BEFORE resolveTop3Urls so URL resolution targets the 3 cards the user actually sees.
+  // If filtering removes everything, fall back to unfiltered ranked list.
   const { budget_ceiling, budget_floor, must_have_attributes } = intent.hard_constraints;
 
   let filteredProducts = [...rankedProducts];
@@ -466,22 +570,23 @@ export async function POST(request: NextRequest) {
   }
 
   let priceFilterApplied = true;
-  if (filteredProducts.length === 0 && products.length > 0) {
+  if (filteredProducts.length === 0 && rankedProducts.length > 0) {
     console.warn(
       "[POST /api/search] Filters removed all results — returning unfiltered. Query:",
       searchQueries
     );
-    filteredProducts = products;
+    filteredProducts = rankedProducts;
     priceFilterApplied = false;
   }
+
+  // [D10] Resolve direct retailer URLs for the top 3 visible products — parallel SerpAPI
+  // immersive calls. Runs after filtering so the 3 resolved products match the 3 UI cards.
+  // Falls back to SerpAPI product_link on any failure. Products 4+ keep product_link.
+  filteredProducts = await resolveTop3Urls(filteredProducts);
 
   const chatResponse = !priceFilterApplied
     ? "Here are the closest options I found."
     : intent.chat_response || "Here are the best matches I found for you!";
-
-  // [D10-partial disabled] SerpAPI google_immersive_product requires a page_token from SerpAPI's
-  // own shopping results — not compatible with Serper's productId. Direct product page URLs
-  // will be available when Kevin's catalog provides them as a first-class field (D10-full).
 
   // D6: Attach explanations by position to top 3 products
   if (explanations.length > 0) {

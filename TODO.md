@@ -31,8 +31,8 @@ _Updated: 2026-04-12 (D5-interim complete — lightweight utility scoring; D5-fu
 
 | # | Task | Owner | Notes |
 |---|---|---|---|
-| ~~D9~~ | ~~Swap SerpAPI → Serper.dev in `route.ts`~~ | ~~[D]~~ | **✅ Complete 2026-04-10.** See Completed. |
-| D10 | **Wire Skimlinks as interim affiliate layer** | [D] | Wrap Serper product URLs via Skimlinks JS snippet or API. Cuts session call count 27 → 9. Full affiliate accuracy returns when Kevin's catalog has direct retailer URLs. |
+| ~~D9~~ | ~~Swap SerpAPI → Serper.dev in `route.ts`~~ | ~~[D]~~ | **✅ Complete 2026-04-10. Reverted 2026-04-15** — Serper could not reliably resolve direct retailer URLs. Serper code preserved in commented `[SERPER - D9]` blocks. See Completed. |
+| ~~D10-partial~~ | ~~Top-3 direct URL resolution via SerpAPI immersive endpoint~~ | ~~[D]~~ | **✅ Complete 2026-04-15.** `resolveTop3Urls()` fires 3 parallel SerpAPI immersive calls after D5 scoring. Products 4+ keep SerpAPI `product_link`. See Completed. |
 | B-07 | Decide catalog scope (retailers + categories) | [D] | Make this call with Kevin before he starts K-catalog-2. Block of time: 30 minutes. |
 
 ### Week 1–2 — Kevin Catalog (Phase 2)
@@ -119,6 +119,7 @@ _Updated: 2026-04-12 (D5-interim complete — lightweight utility scoring; D5-fu
 
 | # | Task | Completed |
 |---|---|---|
+| ✓ | D9-revert + D10-partial: Reverted to SerpAPI as primary search provider. Serper `callSerpAPI()` and `mapSerperResult()` preserved in commented `[SERPER - D9]` blocks for future reinstatement. `mapSerpAPIResult()` added to map SerpAPI field names. `resolveTop3Urls()` reinstated using `serpapi_immersive_product_api` field — 3 flat parallel SerpAPI immersive calls after D5 scoring, top 3 only. Products 4+ keep SerpAPI `product_link`. `SERPAPI_API_KEY` env var active. `serpapi_immersive_product_api` field added to `Product` interface. | 2026-04-15 |
 | ✓ | D5-interim: Lightweight product utility scoring + ranking in `route.ts` — `scoreProduct()` scores against budget ceiling/floor (-100 hard violation), `must_have_attributes` title match (+20 each), `vibe_keywords` (+8 each), `quality_priority`-weighted rating, review volume trust signals, and query origin rank. `scoreAndRankProducts()` stable-sorts all products before price/attribute filter pass. `callSerpAPIBatch()` extended to return `queryOrigins` map. `[D5-interim scores]` log visible in server console. Direct URL resolution remains disabled — all products return Google Shopping URLs. Replace with D5-full against Kevin's K5 enriched objects in Phase 2. | 2026-04-12 |
 | ✓ | D10-partial: Top-3 direct URL resolution via Serper product detail call — `resolveTop3Urls()` added to `route.ts`. Fires 3 parallel Serper calls after filtering, using `product.product_id` + `product.name`. Walks `data.shopping ?? data.sellers` for a preferred-retailer URL (Amazon > Target > Walmart > Best Buy > Nordstrom > first). Updates `product.link` for top 3; products 4+ keep Google Shopping URL. Fails safe — original link preserved on any error. `product_id` field added to `Product` interface and threaded through `transformProducts()`. | 2026-04-11 |
 | ✓ | D9: SerpAPI → Serper.dev migration — `callSerpAPI()` rewritten to POST `https://google.serper.dev/shopping` with `X-API-KEY` header. `mapSerperResult()` added to remap Serper field names (`imageUrl → thumbnail`, `link → product_link`, `ratingCount → reviews`, `productId → product_id`). `extracted_price` fallback parses from price string. `resolveRetailerUrls()` call replaced with `[AFFILIATE - D10]` comment block. `SERP_API_KEY` commented out in `.env.local`. `SERPER_API_KEY` guard added to POST handler. All other orchestration logic (batch, dedup, D6 parallel) unchanged. | 2026-04-10 |

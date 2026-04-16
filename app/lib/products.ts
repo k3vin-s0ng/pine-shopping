@@ -10,7 +10,8 @@ export interface Product {
   match: string;
   img: string;
   link: string;
-  product_id?: string | null;   // Serper productId — used by resolveTop3Urls for direct URL resolution
+  product_id?: string | null;
+  serpapi_immersive_product_api?: string | null;  // SerpAPI token for direct URL resolution (resolveTop3Urls)
   affiliate_degraded?: boolean;
   explanation?: string;
 }
