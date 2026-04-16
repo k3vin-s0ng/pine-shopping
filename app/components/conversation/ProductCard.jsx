@@ -78,6 +78,9 @@ export default function ProductCard({ product, rank, reason }) {
           {/* TODO: wire Save to user session when Kevin's backend (K-02) ships */}
           <button className="save-btn" onClick={() => {}}>Save</button>
         </div>
+        <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', marginTop: 5 }}>
+          Pine earns a commission on purchases.
+        </div>
       </div>
     </div>
   );
