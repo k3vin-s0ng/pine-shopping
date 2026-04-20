@@ -22,9 +22,12 @@
  *   OPENAI_API_KEY
  */
 
+import dotenv from 'dotenv';
+dotenv.config({ path: '.env.local' });
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
 import crypto from 'crypto';
+
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -414,16 +417,19 @@ async function processProduct(item, query) {
   const embedding = await generateEmbedding(embeddingInput);
 
   // Upsert product row (stable content)
-  const productRow = {
+const productRow = {
     external_id: externalId,
     title,
     brand: primarySeller.seller_name ?? null,
     image_urls: imageUrl ? [imageUrl] : [],
-    attributes: {},
+    attributes: {
+        rating: item.product_rating?.value ?? null,
+        review_count: item.product_rating?.votes_count ?? null,
+    },
     embedding,
     content_hash: computeContentHash(title, primarySeller.seller_name, null),
     last_verified_at: new Date().toISOString(),
-  };
+};
 
   const internalId = await upsertProduct(productRow);
 
