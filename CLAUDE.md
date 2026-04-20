@@ -6,11 +6,13 @@
 
 ## What Is Pine?
 
-Pine is an AI-powered conversational shopping assistant. The core differentiator is **conversational intent translation** — users describe what they want naturally and Pine returns real, purchasable products. This is NOT a search engine with a chat wrapper. Context retention across turns is a first-class product requirement.
+Pine is an AI-powered conversational fashion shopping assistant. The core differentiator is **conversational intent translation** — users describe what they want naturally and Pine returns real, purchasable fashion items. This is NOT a search engine with a chat wrapper. Context retention across turns is a first-class product requirement.
+
+**Niche: fashion only.** Pine does not attempt to cover general shopping. Narrowing to fashion enables a high-quality, expert-feeling catalog, better affiliate rates, and a defensible demo. Categories in scope: apparel, footwear, accessories, outerwear. Categories out of scope: electronics, home goods, sporting equipment, beauty (revisit post-funding).
 
 The platform has two modes:
-- **Shop Mode** — single-item conversational product discovery
-- **Plan Mode** — multi-item bundle planning for events, gifts, dorm rooms, outfits
+- **Shop Mode** — single-item conversational fashion discovery
+- **Plan Mode** — multi-item outfit planning for occasions, trips, seasonal wardrobe builds
 
 ---
 
@@ -20,8 +22,11 @@ The platform has two modes:
 |---|---|
 | Frontend | Next.js + TypeScript + React |
 | LLM | OpenRouter → GPT-4o-mini |
-| Product Search | SerpAPI (Google Shopping) — being replaced by Kevin's Data Agent |
-| Database | Kevin — not yet integrated |
+| Product Search (live fallback) | SerpAPI (Google Shopping) — fallback only once catalog is live |
+| Product Catalog (primary) | Postgres + pgvector (Supabase) — Phase 2 in progress |
+| Cache | Redis (Upstash) — Phase 2 in progress |
+| Catalog Ingestion | DataForSEO Merchant API (async batch only — never real-time) |
+| Database | Kevin — catalog Phase 2; user DB Phase 4 |
 | Design | Figma |
 
 ---
@@ -30,8 +35,8 @@ The platform has two modes:
 
 | Person | Domain |
 |---|---|
-| Daniel | LLM integration, Reasoning Agent, product management |
-| Kevin | Backend infrastructure, Data Agent (scraping + retrieval) |
+| Daniel | LLM integration, Reasoning Agent, product management, product catalog (Phase 2) |
+| Kevin | Backend infrastructure, Data Agent (scraping + retrieval), Reddit reviews database (Phase 2) |
 | Eric | Product vision, UI/UX design, voice interface |
 
 Daniel is the PM. When making architecture decisions, flag tradeoffs clearly so Daniel can make the call.
@@ -51,7 +56,7 @@ Search Query Builder
     ↓
 SerpAPI Google Shopping (parallel batch — up to 3 queries)
     ↓
-resolveRetailerUrls() ← parallel per-product
+resolveRetailerUrls() ← parallel per-product (top 3 only)
     └── serpapi_immersive_product_api → product_results.stores → best seller URL
     ↓
 Result Formatter + Price/Attribute Filters
@@ -68,22 +73,67 @@ Reasoning Agent (Daniel)
     ├── Structured Intent Extraction → { hard_constraints, soft_preferences, confidence_score }
     ├── Confidence Check
     │     ├── Low (<0.5): Fire clarification question (double-duty: narrows + reweights)
-    │     └── High (≥0.5): Proceed to Data Agent
+    │     └── High (≥0.5): Proceed to retrieval
     ↓
-Data Agent (Kevin)
-    ├── Multi-source retailer scraping
-    ├── Product page fetch + spec extraction
-    ├── Review signal extraction
-    └── Returns enriched result objects[]
+Redis Cache (Upstash) ← keyed by normalized intent hash, 1–6h TTL
+    ↓ miss
+Postgres + pgvector Catalog (Daniel — K-catalog-1)
+    ├── HNSW vector similarity on intent embedding
+    ├── SQL filters: price_cents, category, availability, attributes
+    ├── Direct retailer URLs pre-resolved (no second API call needed)
+    └── Returns enriched result objects[] (same schema as Data Agent contract)
+    ↓ miss or <3 results
+SerpAPI live fallback (write-through to Redis on hit)
     ↓
 Reasoning Agent (Daniel) — continued
-    ├── Utility scoring against soft preference vector
-    ├── Intent-match explanation generation (per top 3 results)
-    └── Constraint relaxation if results sparse
+    ├── Utility scoring against soft preference vector (D5-full)
+    ├── Intent-match explanation generation (per top 3 results) (D6)
+    └── Constraint relaxation if results sparse (D7)
     ↓
 UI (Eric)
     └── Orb voice interface + Result cards with explanations
 ```
+
+### Catalog Architecture (Phase 2 — Kevin leads)
+
+**Ingestion pipeline (offline batch, never real-time):**
+```
+DataForSEO Merchant API (async Standard queue ~$1/1K)
+    → Products endpoint (title, price, rating, images, product_id)
+    → Sellers endpoint per product_id (direct retailer URLs)
+    → Ad URL endpoint for any remaining aclk tokens ($0.000001/URL)
+    → Normalize + dedupe + embed (OpenAI text-embedding-3-small)
+    → Write to Postgres products + product_pricing tables
+    → Refresh price/availability nightly for top 1K SKUs
+```
+
+**Retrieval path (real-time):**
+```
+Redis (Upstash) → cache-aside, intent hash key, 1h TTL on results
+    ↓ miss
+Postgres+pgvector → HNSW similarity + SQL filters
+    ↓ miss or stale (>7 days)
+SerpAPI live call → write-through to Redis + async enqueue catalog refresh
+```
+
+**Schema split (stable content vs volatile pricing):**
+- `products` — title, description, image_url[], category_id (ltree), attributes (JSONB), embedding (halfvec 1536), tsvector, content_hash
+- `product_pricing` — product_id, merchant, price_cents, sale_price_cents, availability, affiliate_url, refreshed_at, stale_after
+- `price_history` — append-only, monthly-partitioned
+- `categories` — ltree path, slug, parent_id
+
+**Retailer priority (fashion-specific, ranked by affiliate rate + brand fit):**
+```
+amazon.com, nordstrom.com, macys.com, zappos.com, asos.com,
+revolve.com, abercrombie.com, anthropologie.com, urbanoutfitters.com,
+gap.com, hm.com, zara.com, target.com, walmart.com
+```
+- DataForSEO is **async-only** (even Priority queue ~1 min). Never call it on the real-time query path. Batch ingestion only.
+- pgvector HNSW is chosen over IVFFlat — better for dynamic catalogs (no retraining on insert).
+- Qdrant is **not** being used for Phase 2. pgvector on Supabase is the decision — one DB, ACID price updates, half the ops surface area. Revisit Qdrant only if catalog exceeds 1M products.
+- Direct retailer URLs are resolved **at ingest time** (Sellers endpoint), not at query time. This is what eliminates the SerpAPI immersive call per session.
+
+---
 
 ### Handoff Contract (Daniel ↔ Kevin) — MUST NOT CHANGE without both agreeing
 
@@ -96,13 +146,19 @@ UI (Eric)
     budget_floor?: number;
     must_have_attributes?: string[];
     in_stock_required?: boolean;
+    size?: string;                          // e.g. "medium", "size 8", "32x30"
+    gender_presentation?: "mens" | "womens" | "unisex";
   };
   soft_preferences: {
-    aesthetic?: string;
-    occasion?: string;
+    aesthetic?: string;                     // e.g. "quiet luxury", "coastal", "streetwear", "minimalist"
+    occasion?: string;                      // e.g. "wedding guest", "office", "date night", "gym"
     vibe_keywords?: string[];
     brand_sensitivity?: "low" | "medium" | "high";
     quality_priority?: "low" | "medium" | "high";
+    fit_preference?: string;               // e.g. "oversized", "slim", "relaxed", "tailored"
+    color_palette?: string[];              // e.g. ["neutral", "earth tones"] or ["black", "white"]
+    season?: string;                       // e.g. "summer", "fall", "transitional"
+    style_avoid?: string[];               // e.g. ["no logos", "nothing too casual"]
   };
   search_query: string;
   session_id: string;
@@ -117,11 +173,12 @@ UI (Eric)
   in_stock: boolean;
   url: string;           // MUST be a direct retailer URL (e.g. amazon.com/dp/..., target.com/p/...)
                          // NEVER a google.com/shopping URL -- affiliate links require direct retailer URLs
-                         // Kevin owns URL resolution via SerpAPI Product Results, Amazon PA-API, or scraping
+                         // Phase 2: resolved at ingest time from DataForSEO Sellers endpoint
+                         // Phase 2 fallback: SerpAPI immersive (resolveTop3Urls) for live misses
   image_url: string;
   retailer: string;
   retailer_sku: string;        // keep for future closed-ecosystem fulfillment
-  specs: Record<string, string>;
+  specs: Record<string, string>;           // fashion attributes: gender, sizes_available, colors, fit, material, occasion[], season[]
   review_signals: {
     quality_signal: string;
     fit_signal: string;
@@ -173,7 +230,7 @@ The intent extraction system **must** receive the full conversation history on e
 - Returns `{ products, chatResponse, clarificationNeeded: boolean, intent }` — `clarificationNeeded` is explicit; `intent` is the full extraction result for client-side accumulation
 - Accepts `accumulatedIntent` from request body — logged for observability, will be consumed by D5
 - Runs up to 3 parallel SerpAPI queries (`search_query` + `related_search_queries` from LLM) via `callSerpAPIBatch()`
-- `resolveRetailerUrls()` runs after shopping search — calls `serpapi_immersive_product_api` per product (parallel), reads `product_results.stores`, picks seller by priority (Amazon > Target > Walmart > Best Buy > Nordstrom). `affiliate_degraded: true` on fallback.
+- `resolveTop3Urls()` runs after D5 scoring — calls `serpapi_immersive_product_api` for top 3 products only (parallel). Products 4+ keep `product_link`.
 - Price filtering applied post-resolution against `hard_constraints.budget_ceiling` / `budget_floor`
 - `must_have_attributes` filter applied if present
 
@@ -219,13 +276,18 @@ Auth system (`authmodal.tsx`, `auth.tsx`) was deleted in Kevin's 2026-03-29 UI o
 
 ## What NOT to Do
 
+- Do not return non-fashion products in search results — Pine is a fashion assistant. Electronics, home goods, sporting equipment, and beauty are out of scope until explicitly re-scoped post-funding.
 - Do not pivot product scope mid-session without flagging as a strategic decision
 - Do not silently drop conversation history to simplify a function
 - Do not add new dependencies without noting them here
 - Do not implement Plan Mode features until Shop Mode Level 4 core is stable
 - Do not use localStorage auth as a model for real auth
 - Do not change the Daniel↔Kevin handoff contract schema without both agreeing
-- Do not remove SerpAPI fallback until Kevin's scraping agent is demonstrably stable
+- Do not remove SerpAPI fallback until Kevin's catalog is demonstrably stable and hit rate >80%
+- Do not call DataForSEO on the real-time query path — it is async-only and incompatible with synchronous response pipelines. Batch ingestion only.
+- Do not use Qdrant for Phase 2 catalog — pgvector on Supabase is the decided architecture. Raise a flag if catalog exceeds 1M products and revisit then.
+- Do not store product images as bytes — store URLs only. Use Cloudflare R2 proxy if caching is needed.
+- Do not re-embed products on price updates — embeddings regenerate only when content_hash changes.
 
 ---
 

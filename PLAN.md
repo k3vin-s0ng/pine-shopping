@@ -1,12 +1,12 @@
 # Pine — Product Roadmap
 
-_Last updated: 2026-04-12 (D5-interim shipped — lightweight utility scoring on Serper fields; D5-full deferred to Phase 2 pending K5)_
+_Last updated: 2026-04-19 (Fashion niche decided — Pine scoped to apparel, footwear, accessories, outerwear only. Catalog seed queries, retailer priority, intent schema, and D6 explanation tone all updated to reflect fashion focus.)_
 
 ---
 
 ## Current Phase: Level 4 Architecture — 2-Week Sprint (Character Capital Deadline)
 
-The goal is to upgrade Pine from Level 3.5 (single intent extraction call + SerpAPI) to Level 4/4.5 on the DME framework — a reasoning-first conversational shopping engine with structured intent, multi-turn clarification, utility scoring, and explanation generation.
+The goal is to upgrade Pine from Level 3.5 (single intent extraction call + SerpAPI) to Level 4/4.5 on the DME framework — a reasoning-first conversational shopping engine with structured intent, multi-turn clarification, utility scoring, and explanation generation. **Phase 2 now includes the product catalog index as a hard prerequisite for eliminating per-query SerpAPI costs and enabling full D5 utility scoring.**
 
 ---
 
@@ -40,39 +40,41 @@ The goal is to upgrade Pine from Level 3.5 (single intent extraction call + Serp
 
 ## Phase 2 — Level 4 Reasoning Agent + Product Catalog (Current Sprint)
 
-**Exit criteria:** Pine extracts structured intent, scores confidence, asks smart clarifying questions when needed, scores results against a preference vector, and explains why each recommendation matches. Retrieval cost is decoupled from query volume.
+**Exit criteria:** Pine extracts structured fashion intent (including fit, occasion, aesthetic, size, color palette), scores confidence, asks smart clarifying questions when needed, scores results against a fashion preference vector, and explains why each recommendation matches. Retrieval cost is decoupled from query volume via the catalog layer. Catalog covers fashion categories only: apparel, footwear, accessories, outerwear.
 
-### Daniel — Reasoning Agent + API
+### Daniel — Reasoning Agent + API + Product Catalog
 
 - [x] D1: Structured intent extraction → `{ hard_constraints, soft_preferences, confidence_score, clarification_needed }`
 - [x] D2: Intent confidence scoring (0.0–1.0 threshold gates clarification vs. search)
-- [x] D3: Multi-turn clarification loop — preference accumulator (`accumulatedIntent`) merges constraints across turns; ACCUMULATION RULE + refinement-turn confidence floor added to prompt
-- [x] D4: Dialog adaptation by user expertise level — `user_expertise` field + USER EXPERTISE CLASSIFICATION section in prompt; clarification question style adapts per level
-- [x] **D5-interim: Lightweight utility scoring (Serper fields only)** — `scoreProduct()` + `scoreAndRankProducts()` wired into route. Budget hard violation -100, attribute/keyword title match, quality-priority-weighted rating, review volume trust signal, query origin weight. _(Complete 2026-04-12)_
-- [ ] D5-full: Full utility scoring against Kevin's K5 enriched result objects — specs, review_signals, structured attributes. Blocked on K-catalog-1 + K5.
-- [x] D6: Intent-match explanation generation per top 3 results — `generateExplanations()` wired to `ProductCard` via `reason` prop
+- [x] D3: Multi-turn clarification loop — preference accumulator (`accumulatedIntent`) merges constraints across turns
+- [x] D4: Dialog adaptation by user expertise level — `user_expertise` field + USER EXPERTISE CLASSIFICATION section in prompt
+- [x] **D5-interim: Lightweight utility scoring (SerpAPI fields only)** — `scoreProduct()` + `scoreAndRankProducts()` wired into route. _(Complete 2026-04-12)_
+- [ ] D5-full: Full utility scoring against Kevin's K5 enriched result objects — fashion attributes (fit, material, occasion, season, color), review_signals, structured specs. Blocked on D-catalog-1 + K5.
+- [x] D6: Intent-match explanation generation per top 3 results — `generateExplanations()` wired to `ProductCard`. Explanation language to be updated for fashion vocabulary (fit, occasion, aesthetic) once fashion intent fields are wired through.
 - [ ] D7: Constraint relaxation logic when Data Agent returns sparse results
 - [ ] D8: Confident single recommendation mode (when top result significantly outscores others)
-- [x] **D9: Swap SerpAPI → Serper.dev** _(Complete 2026-04-10, reverted 2026-04-15)_ — Serper could not reliably resolve direct retailer URLs (`item.link` is Google Shopping URL; `google_immersive_product` requires SerpAPI page_token, not cross-compatible). Serper code preserved in `[SERPER - D9]` comment blocks.
-- [x] **D10-partial: Top-3 direct URL resolution via SerpAPI immersive endpoint** _(Complete 2026-04-15)_ — `resolveTop3Urls()` fires 3 parallel SerpAPI immersive calls after D5 scoring. Products 4+ keep `product_link`. Full resolution (D10-full) replaced by catalog direct URLs in Phase 2.
+- [x] **D9: SerpAPI → Serper → SerpAPI (reverted 2026-04-15)** — Serper cannot resolve direct retailer URLs. SerpAPI reinstated. Serper code preserved in `[SERPER - D9]` comment blocks.
+- [x] **D10-partial: Top-3 direct URL resolution via SerpAPI immersive endpoint** _(Complete 2026-04-15)_ — `resolveTop3Urls()` fires 3 parallel SerpAPI immersive calls after D5 scoring. Products 4+ keep `product_link`. Full elimination of this call is D10-full, blocked on D-catalog-1.
 
-### Kevin — Data Agent + Product Catalog Index
+### Kevin — Data Agent + Reddit Reviews Database
 
-> **Architecture note (2026-04-10):** Kevin's database workstream has been split into two distinct deliverables with different timelines. The **product catalog index** is Phase 2 infrastructure — it unblocks cheap retrieval, direct affiliate URLs, and D5. The **user database** (session persistence, personalization, auth) stays in Phase 4. These are different systems. Do not conflate them.
+> **Workstream reassignment (2026-04-18):** Kevin's Phase 2 focus is the Reddit reviews database — batch scraping community recommendation signals from category-relevant subreddits and storing them as structured `review_signals` in the catalog. Product catalog ingestion is now Daniel's workstream. Kevin remains owner of the Data Agent (K1–K7) and the SerpAPI fallback path.
 
-- [ ] **K-catalog-1: Product catalog index (Phase 2 — NOW)** — Vector store of ~10K–50K products with prices, direct retailer URLs, and basic attributes. Enables sub-50ms retrieval via HNSW (Qdrant self-hosted recommended). Eliminates per-query SerpAPI/Serper costs once live. Unblocks D5 utility scoring. _(Moved from Phase 4 — 2026-04-10)_
-- [ ] **K-catalog-2: Batch catalog population via DataForSEO Merchant API** — Use DataForSEO's async Merchant API in batch mode (not real-time) to discover and ingest ~50K products across 3 target retailers. DataForSEO is async-only — correct role is background ingestion, not real-time query serving. Initial catalog cost ~$15–50 one-time. _(New — 2026-04-10)_
-- [ ] **K-catalog-3: Scope catalog: retailers + categories** — Decision needed with Daniel before K-catalog-2 can begin. Recommended: Amazon + Target + 1 category-specific retailer; 3–5 product categories max. Narrow and reliable beats broad and flaky for demo. _(New — 2026-04-10)_
-- [ ] K1: Structured query intake contract (agree schema with Daniel — Week 1 Day 1-2)
+> **Workstream split reminder (2026-04-10):** Product catalog index (Phase 2) and user database (Phase 4) are distinct systems. Do not conflate.
+
+- [ ] **K-reddit-1: Subreddit scope + scraping pipeline** — Fashion-specific subreddits: r/femalefashionadvice, r/malefashionadvice, r/frugalmalefashion, r/streetwear, r/buyitforlife (for quality signals on accessories/outerwear). Build batch scraper: top posts (all-time + past year) + comments → extract product mentions, brand names, sentiment. Not real-time — scheduled batch, run weekly.
+- [ ] **K-reddit-2: Structured signal extraction** — Parse raw scraped text into structured `review_signals`: `{ product_name, brand, subreddit, sentiment, mention_count, community_label, post_url }`. LLM-assisted extraction acceptable; deterministic fallback on parse failure.
+- [ ] **K-reddit-3: Schema + storage in Supabase** — Store extracted signals in a `reddit_signals` table keyed by normalized product name + brand. Join to `products` table via fuzzy match on title. Signals feed into D5/D6 explanation generation as social proof layer (e.g. "highly recommended by r/BuyItForLife").
+- [ ] **K-reddit-4: Signal freshness + re-scrape cadence** — Weekly re-scrape for top subreddits, monthly for long-tail. Append-only inserts with `scraped_at` timestamp — do not overwrite prior signals.
+- [ ] K1: Structured query intake contract (agree schema with Daniel — already defined in CLAUDE.md)
 - [ ] K2: Retailer scraping layer (Amazon + Target + 1 category-specific retailer)
 - [ ] K3: Product page fetch + structured data extraction (price, stock, specs, image, URL)
 - [ ] K4: Review signal extraction → `{ quality_signal, fit_signal, value_signal, avg_rating, review_count }`
 - [ ] K5: Enriched result object construction (combines K3+K4 into typed JSON per product)
 - [ ] K6: Sparse result flag when <3 viable products satisfy hard constraints
-- [x] K8: Direct retailer URL resolution — `resolveRetailerUrls()` via `serpapi_immersive_product_api` endpoint. **Currently disabled** — SerpAPI immersive call is cost-prohibitive at scale (3×3×n calls per session). Will be reinstated natively when Kevin's catalog provides direct retailer URLs as a first-class field.
+- [x] K8: Direct retailer URL resolution — now handled at ingest time via DataForSEO Sellers endpoint. `resolveRetailerUrls()` immersive call (cost-prohibitive at scale) replaced by `resolveTop3Urls()` for live fallback path only.
 - [x] Adjacent search queries — `related_search_queries` field in intent schema + prompt, `buildSearchQueries()` + `callSerpAPIBatch()` in route, up to 3 parallel queries per turn.
-- [ ] K1: Structured query intake contract (agree schema with Daniel — Week 1 Day 1-2)
-- [ ] K7: SerpAPI/Serper silent fallback when catalog returns zero results or fails
+- [ ] K7: SerpAPI silent fallback when catalog returns zero results or fails — fires when catalog + Redis miss. Write-through to Redis on fallback hit. Flag `affiliate_degraded: true` if URL is not a direct retailer link.
 
 ### Eric — Voice + UI
 - [x] E1: Voice input — `orb.jsx` uses browser `SpeechRecognition` API. Auto-routing complete.
@@ -109,8 +111,9 @@ Only begin after Phase 2 exit criteria are met.
 - [ ] User session persistence across visits
 - [ ] Preference signals from past searches inform future recommendations
 - [ ] Replace localStorage auth with real auth (Kevin's backend)
-- [ ] Personalization layer for Discover page (preset SerpAPI/Serper queries → personalized catalog queries)
-- [ ] Reddit enrichment signal — scrape r/BuyItForLife, r/frugalmalefashion, r/running (3–5 category-relevant subreddits) for community product recommendations. Store as structured `review_signals` alongside catalog records. Provides "highly recommended by hiking communities" signal for D6 explanations. _(Scoped 2026-04-10 — batch pipeline, not real-time)_
+- [ ] Personalization layer for Discover page (preset SerpAPI queries → personalized catalog queries)
+- [ ] Reddit enrichment signal — _(Moved to Phase 2 as K-reddit-1 through K-reddit-4 under Kevin. Fashion subreddits: r/femalefashionadvice, r/malefashionadvice, r/frugalmalefashion, r/streetwear, r/buyitforlife.)_
+- [ ] Apply to affiliate networks in parallel — Impact.com, CJ Affiliate, Awin, ShareASale, Rakuten Advertising. Free bulk product catalogs in XML/CSV via FTP/API once approved. 3–6 month approval timeline — start application process during Phase 2.
 
 ---
 
@@ -153,7 +156,7 @@ The long-term product vision is payment completing on Pine with direct retailer 
 | 2026-03-25 | Voice-first UI with text as equal fallback | Voice signals differentiation visually; text parity required for real-world usage contexts |
 | 2026-03-25 | Structured intent extraction (hard constraints + soft preferences) | Foundation for Level 4 DME architecture — all downstream features depend on this |
 | 2026-03-25 | Kevin builds Data Agent from existing scraping agent | Replaces SerpAPI with direct retailer data for real pricing, stock, and review signals |
-| 2026-03-25 | SerpAPI retained as silent fallback | Insurance against scraping failures, especially during Character Capital demo |
+| 2026-03-25 | SerpAPI retained as silent fallback | Insurance against catalog misses; demoted from primary to fallback once catalog hit rate >80% |
 | 2026-03-25 | Closed ecosystem payment deferred post-funding | Requires retailer agreements, legal setup, Stripe business account — not 2-week scope |
 | 2026-03-25 | retailer_sku included in K5 data contract | Preserves path to closed fulfillment without building it now |
 | 2026-03-25 | Rebranded Sicero → Pine | Navy/gold color scheme, gold pinecone logo |
@@ -171,21 +174,26 @@ The long-term product vision is payment completing on Pine with direct retailer 
 | 2026-04-07 | Orb halo animation, Inworld TTS, session state reset | Multiple UX polish items completed. |
 | 2026-04-10 | Placeholder cycling animation + ldrs dotPulse orb loader | PLACEHOLDERS array cycles 8 phrases every 1500ms with CSS fade while processing. ldrs `<l-dot-pulse>` replaces waveform bars during `isProcessing`. |
 | 2026-04-10 | pineHandoff extended to carry products array | Eliminates conversation page mount flash — hydrates state directly from handoff without second API call. |
-| 2026-04-10 | **SerpAPI → Serper.dev switch decided (D9)** | Serper is synchronous (critical — DataForSEO Merchant is async-only, incompatible with real-time query serving), similar response schema (2 field renames), 80% cheaper per call ($1/1K vs $5/1K). DataForSEO assigned to batch catalog population role only, not real-time path. |
-| 2026-04-10 | **DataForSEO Merchant API rejected for real-time path** | Async-only (task POST → task GET polling) — fundamentally incompatible with Pine's synchronous response pipeline. `url` field is null in shopping product listings; direct retailer URLs require separate Sellers endpoint call (same cost problem as SerpAPI immersive). Assigned to batch mode for Kevin's catalog ingestion instead. |
-| 2026-04-10 | **Skimlinks wired as interim affiliate (D10)** | Drops `resolveRetailerUrls()` immersive call entirely, cutting session API calls from 27 → 9. Skimlinks wraps Serper URLs and attempts attribution — degrades gracefully. Full affiliate accuracy restored when Kevin's catalog provides direct retailer URLs as first-class field. |
-| 2026-04-11 | **Top-3 URL resolution via Serper product detail call (D10-partial)** | `resolveTop3Urls()` fires 3 parallel Serper calls after filtering, querying by `productId` + title. Limits resolution to exactly 3 calls per turn regardless of result count. Products 4+ degrade gracefully to Google Shopping URL. Full resolution replaced by catalog direct URLs (D10-full) once K-catalog-1 is live — eliminating the second API call entirely. `product_id` added to `Product` interface to survive `transformProducts()`. |
-| 2026-04-10 | **Product catalog index moved to Phase 2** | "Kevin's database" was collapsed into one Phase 4 line item covering both catalog retrieval and user persistence. These are different systems. Catalog index (vector store, ~50K products, HNSW retrieval) is Phase 2 — it unblocks cheap retrieval, direct URLs, and D5. User database (sessions, personalization, auth) stays Phase 4. |
-| 2026-04-10 | **API economics modeled — own database confirmed as only architecture where costs don't scale with usage** | At 5K MAU: SerpAPI ~$405/mo API cost vs. $506 affiliate revenue (20% margin). Serper: ~$81/mo (84% margin). Own DB: ~$40/mo fixed regardless of MAU (92% margin). Own DB break-even on build cost (~$50 one-time) measured in days once live. |
-| 2026-04-12 | **D5-interim shipped using Serper fields only** | Top 3 ordering must reflect user intent, not Serper's native ranking. Hard constraint violations deprioritised with -100 penalty. Attribute and keyword title matches rewarded (+20/+8). Rating weighted by quality_priority preference. Review volume as trust signal. Query origin penalises related-query results in ties. Direct URL resolution remains disabled. Full D5 deferred to Phase 2 pending Kevin's K5 enriched result objects. |
-| 2026-04-15 | **Reverted SerpAPI → Serper → SerpAPI. `resolveTop3Urls()` reinstated via immersive endpoint.** | Serper cannot reliably resolve direct retailer URLs — `item.link` is a Google Shopping URL for most results, and `google_immersive_product` requires a `page_token` from SerpAPI's own results (not cross-compatible with Serper's `productId`). SerpAPI reinstated as primary search provider. Serper code preserved in `[SERPER - D9]` comment blocks for future reinstatement. `resolveTop3Urls()` now fires 3 flat SerpAPI immersive calls after D5 scoring — top 3 only. Full elimination of SerpAPI dependency deferred to Phase 2 catalog (K-catalog-1). |
-| 2026-04-10 | **Reddit data strategy clarified** | ChatGPT/LLMs don't query Reddit in real time — it's training data. For Pine: scrape 3–5 category-relevant subreddits (r/BuyItForLife, r/frugalmalefashion, etc.) in batch, extract structured product recommendation signals, store as `review_signals` in catalog. Not a real-time retrieval path. Scoped to Phase 4 enrichment layer. |
+| 2026-04-10 | SerpAPI → Serper.dev switch decided (D9) | _(Subsequently reverted — see 2026-04-15)_ |
+| 2026-04-10 | DataForSEO Merchant API rejected for real-time path | Async-only (task POST → task GET polling) — fundamentally incompatible with Pine's synchronous response pipeline. `url` field is null in shopping product listings; direct retailer URLs require separate Sellers endpoint call. Assigned to batch mode for Kevin's catalog ingestion instead. |
+| 2026-04-10 | Skimlinks wired as interim affiliate (D10) | Drops `resolveRetailerUrls()` immersive call entirely, cutting session API calls from 27 → 9. Skimlinks wraps SerpAPI URLs and attempts attribution — degrades gracefully. Full affiliate accuracy restored when Kevin's catalog provides direct retailer URLs as first-class field. |
+| 2026-04-11 | Top-3 URL resolution via SerpAPI immersive endpoint (D10-partial) | `resolveTop3Urls()` fires 3 parallel SerpAPI immersive calls after D5 scoring. Top 3 only. Products 4+ degrade gracefully. Full resolution replaced by catalog direct URLs (D10-full) once D-catalog-1 is live. |
+| 2026-04-10 | Product catalog index moved to Phase 2 | "Kevin's database" was collapsed into one Phase 4 line item covering both catalog retrieval and user persistence. These are different systems. Catalog index is Phase 2 — it unblocks cheap retrieval, direct URLs, and D5. User database stays Phase 4. |
+| 2026-04-10 | API economics modeled — own database confirmed as only architecture where costs don't scale with usage | At 5K MAU: SerpAPI ~$405/mo API cost vs. $506 affiliate revenue (20% margin). Own DB: ~$40/mo fixed regardless of MAU (92% margin). |
+| 2026-04-12 | D5-interim shipped using SerpAPI fields only | Top 3 ordering must reflect user intent, not SerpAPI's native ranking. Hard constraint violations deprioritised with -100 penalty. Attribute and keyword title matches rewarded. Rating weighted by quality_priority. Full D5 deferred to Phase 2 pending K5. |
+| 2026-04-15 | Reverted SerpAPI → Serper → SerpAPI. `resolveTop3Urls()` reinstated via immersive endpoint. | Serper cannot reliably resolve direct retailer URLs — `item.link` is a Google Shopping URL for most results, and `google_immersive_product` requires a `page_token` from SerpAPI's own results (not cross-compatible). SerpAPI reinstated as primary search provider. Serper code preserved in `[SERPER - D9]` comment blocks. |
+| 2026-04-18 | **pgvector on Supabase chosen over Qdrant for Phase 2 catalog** | One database instead of two. ACID price updates. pgvector HNSW matches Qdrant performance at 50K products. ~75% cheaper than Pinecone. Qdrant revisited only if catalog exceeds 1M products. |
+| 2026-04-18 | **DataForSEO confirmed as batch ingestion source** | Products → Sellers → Ad URL endpoint pattern resolves direct retailer URLs at ingest time (~$0.001/product). Organic results return direct URLs; sponsored results resolved via Ad URL endpoint at $0.000001/URL (effectively free). Async latency (~1 min even Priority) is irrelevant for batch — this is the right fit. |
+| 2026-04-18 | **Redis (Upstash) added as cache layer** | Cache-aside in front of Postgres. 1h TTL on result sets. Targets 40–60% hit rate on repeat queries. Write-through on every SerpAPI fallback hit. ~$10/mo to start (free tier). |
+| 2026-04-18 | **SerpAPI demoted to live fallback** | SerpAPI is not being replaced — it is being demoted. Fires only on catalog+Redis miss. Estimated fallback rate at steady state: 20–30% of queries. Removes SerpAPI from the per-query cost model for the majority of traffic. |
+| 2026-04-19 | **Pine scoped to fashion niche only** | General shopping is too broad for a defensible catalog, a compelling demo, or expert-feeling recommendations. Fashion (apparel, footwear, accessories, outerwear) has high AOV, strong affiliate rates, enthusiastic early adopters, and a tractable catalog size. Out of scope until post-funding: electronics, home goods, sporting equipment, beauty. Downstream changes: retailer priority updated to fashion retailers, seed queries replaced with fashion queries, intent schema extended with fit/occasion/aesthetic/size/color_palette/season/style_avoid fields, D6 explanation language to use fashion vocabulary, Kevin's Reddit subreddits updated to r/femalefashionadvice, r/malefashionadvice, r/frugalmalefashion, r/streetwear, r/buyitforlife. |
+| 2026-04-19 | **Catalog retrieval threshold set at cosine similarity ≥ 0.82 + minimum 3 results** | Below this threshold the HNSW index is reaching — catalog doesn't have good matches. Fall through to SerpAPI live call. Threshold is tunable as catalog grows. Prevents a small catalog from returning confidently wrong results. |
 
 ---
 
 ## Open Strategic Questions
 
-- Which 3–5 subreddits and which 2–3 retailers does Kevin scrape first for catalog? (Daniel decision, blocks K-catalog-3)
-- Which vector DB for catalog — Qdrant self-hosted ($30/mo VPS) or managed (Pinecone/Weaviate free tier)? (Kevin decision)
-- What is the primary user persona for Shop Mode? (still needs definition — U-01)
+- Which fashion retailers and sub-categories does Daniel target first for catalog seed queries? Recommendation: Nordstrom + ASOS + Amazon for retailers; women's dresses, men's casualwear, footwear, outerwear for categories. **(Daniel decision — blocks D-catalog-3 and D-catalog-2. Decide this week.)**
+- What is the primary user persona for Shop Mode? Fashion-forward woman 22–35? Style-conscious man 18–30? Both? (still needs definition — U-01)
 - At what point does Kevin's user database become essential vs. nice-to-have?
+- Which affiliate networks to apply to first? (Impact.com, CJ Affiliate, Awin recommended — long lead time, start now. Fashion brands often have better rates on these than Amazon Associates.)
