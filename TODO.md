@@ -1,6 +1,6 @@
 # Pine — Active Task Board
 
-_Updated: 2026-04-19 (Fashion niche decided. Retailer priority, seed queries, intent schema, Reddit subreddits, and D6 explanation language all scoped to fashion. B-07 updated to reflect fashion catalog scope decision.) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
+_Updated: 2026-04-21 (Catalog-first retrieval wired in route.ts — retrieveFromCatalog() + pgvector similarity search + SerpAPI fallback. Fashion intent fields added to IntentExtractionResult and prompt. PREFERRED_RETAILERS consolidated.) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
 
 ---
 
@@ -50,7 +50,7 @@ _Updated: 2026-04-19 (Fashion niche decided. Retailer priority, seed queries, in
 
 | # | Task | Owner | Notes |
 |---|---|---|---|
-| D-catalog-retrieve | Catalog-first retrieval in Reasoning Agent | [D] | Add `retrieveFromCatalog(intent)` function before the existing SerpAPI call in `route.ts`. Input: structured intent object. Output: same shape as current SerpAPI response (no downstream changes). Query: HNSW vector similarity on intent embedding + SQL filters on `price_cents`, `category_id`, `availability`, `attributes`. Check Redis first; fall through to Postgres; fall through to SerpAPI on miss or <3 results. Write-through to Redis on SerpAPI hit. |
+| ~~D-catalog-retrieve~~ | ~~Catalog-first retrieval in Reasoning Agent~~ | ~~[D]~~ | **✅ Complete 2026-04-21** — `retrieveFromCatalog()`, `generateQueryEmbedding()`, `getSupabaseClient()` added to route.ts. POST handler attempts catalog first (similarity ≥ 0.72, min 3 results); falls through to SerpAPI on miss. `match_products` RPC SQL provided in session brief — run in Supabase SQL Editor before testing. |
 | D-catalog-freshness | Freshness gate in retrieval | [D] | Filter out or async-enqueue refresh for any catalog result where `refreshed_at` > 7 days. Never surface a stale price to a user. |
 | K1 | Data Agent: structured query intake contract | [K] | Accept typed query object from Reasoning Agent per CLAUDE.md schema. Agree with Daniel before building. |
 | K2 | Retailer scraping layer | [K] | Adapt existing scraping agent. Start with scoped retailers from D-catalog-3. |
@@ -68,7 +68,7 @@ _Updated: 2026-04-19 (Fashion niche decided. Retailer priority, seed queries, in
 | # | Task | Owner | Notes |
 |---|---|---|---|
 | D-metrics | Hit rate instrumentation | [D] | Log: catalog hit rate, Redis hit rate, SerpAPI fallback rate, avg result age, latency per path. These are the numbers that prove the architecture works. Character Capital will want to see them. |
-| D-refresh | Nightly price refresh cron | [D] | Top 1K products by click/session volume: re-scrape retailer JSON-LD directly (5–10× cheaper than re-hitting DataForSEO). Long tail: 24–72h. Hard rule: suppress any price older than 7 days. |
+| D-refresh | Weekly catalog price refresh | [D] | Re-run catalog-ingest.js weekly via cron or manually. Upserts overwrite existing rows — no duplicates. Cost: ~$1–2/run at current seed query count. Replaces the JSON-LD scraper approach (unreliable across retailers, breaks silently on page structure changes). Add staleness filter to retrieveFromCatalog() before this runs: .gte('refreshed_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()). Revisit JSON-LD scraper post-funding when catalog exceeds 500K products. |
 | D10-full | Replace `resolveTop3Urls()` with catalog direct URLs | [D] | Once D-catalog-1 is live and catalog URLs are validated, remove `resolveTop3Urls()` and the SerpAPI immersive call entirely. Direct retailer URLs come from the catalog as a first-class field. |
 
 ### PM / Product (Parallel)
@@ -177,6 +177,9 @@ _Updated: 2026-04-19 (Fashion niche decided. Retailer priority, seed queries, in
 | ✓ | Flash fixes (4): pineResponse flash, idle copy reappearance, subtitle reappearance, "No results" on mount | 2026-04-10 |
 | ✓ | pineHandoff extended to carry products array — eliminates conversation page mount API call | 2026-04-10 |
 | ✓ | API economics modeled — own catalog confirmed as only architecture with fixed-cost retrieval | 2026-04-10 |
+| ✓ | **Fashion intent fields added to IntentExtractionResult + prompt** — `hard_constraints`: `size`, `gender_presentation`. `soft_preferences`: `fit_preference`, `color_palette`, `season`, `style_avoid`. FASHION CONTEXT section added to `intentExtractionPrompt.ts` with 6 worked examples. `mergeIntent()` updated to accumulate `color_palette` and `style_avoid` as sets. | 2026-04-21 |
+| ✓ | **PREFERRED_RETAILERS consolidated** — Duplicate arrays (`PREFERRED_RETAILERS` + `RETAILER_PRIORITY`) merged into single constant at top of `route.ts`, updated to full fashion retailer list per CLAUDE.md. | 2026-04-21 |
+| ✓ | **D-catalog-retrieve: Catalog-first retrieval wired in route.ts** — `getSupabaseClient()` (lazy init), `generateQueryEmbedding()` (OpenAI text-embedding-3-small via existing openai instance), `retrieveFromCatalog()` (pgvector similarity ≥ 0.72 + pricing join + hard constraint filters + min 3 results gate). POST handler: catalog path → SerpAPI else path. Filter/resolveTop3Urls/D6 pipeline unchanged. Run `match_products` RPC SQL in Supabase SQL Editor before testing. | 2026-04-21 |
 
 ---
 

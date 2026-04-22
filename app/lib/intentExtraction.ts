@@ -8,6 +8,8 @@ export interface IntentExtractionResult {
     budget_floor?: number;
     must_have_attributes?: string[];
     in_stock_required?: boolean;
+    size?: string;
+    gender_presentation?: "mens" | "womens" | "unisex";
   };
   soft_preferences: {
     aesthetic?: string;
@@ -15,6 +17,10 @@ export interface IntentExtractionResult {
     vibe_keywords?: string[];
     brand_sensitivity?: "low" | "medium" | "high";
     quality_priority?: "low" | "medium" | "high";
+    fit_preference?: string;
+    color_palette?: string[];
+    season?: string;
+    style_avoid?: string[];
   };
   search_query: string;
   related_search_queries?: string[];
@@ -151,6 +157,18 @@ export function mergeIntent(
         ...new Set([
           ...(accumulated.soft_preferences?.vibe_keywords ?? []),
           ...(latest.soft_preferences?.vibe_keywords ?? []),
+        ]),
+      ],
+      color_palette: [
+        ...new Set([
+          ...(accumulated.soft_preferences?.color_palette ?? []),
+          ...(latest.soft_preferences?.color_palette ?? []),
+        ]),
+      ],
+      style_avoid: [
+        ...new Set([
+          ...(accumulated.soft_preferences?.style_avoid ?? []),
+          ...(latest.soft_preferences?.style_avoid ?? []),
         ]),
       ],
     },

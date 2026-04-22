@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { OpenAI } from "openai";
+import { createClient } from '@supabase/supabase-js';
 import { extractIntent, IntentExtractionResult } from "@/app/lib/intentExtraction";
 import { Product } from "@/app/lib/products";
 
 const SEARCH_VARIANT_COUNT = 3;
 const MAX_RESULTS_PER_QUERY = 10;
+
+// Catalog retrieval thresholds.
+// Similarity: cosine similarity score returned by pgvector (0.0–1.0).
+// Set high deliberately — a weak catalog match is worse than a live SerpAPI result.
+const CATALOG_SIMILARITY_THRESHOLD = 0.72;
+// Minimum results above threshold before we trust the catalog over SerpAPI.
+const CATALOG_MIN_RESULTS = 3;
+// Candidates fetched from pgvector before filtering — more than needed so filters have room.
+const CATALOG_FETCH_LIMIT = 20;
 
 const openai = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
@@ -12,6 +22,15 @@ const openai = new OpenAI({
 });
 
 const MODEL = "openai/gpt-4o-mini";
+
+// Initialised lazily so missing env vars don't crash the module at import time.
+// Only used in retrieveFromCatalog — SerpAPI path never touches this.
+function getSupabaseClient() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key);
+}
 
 interface OnlineSeller {
   name: string;
@@ -21,12 +40,9 @@ interface OnlineSeller {
 }
 
 const PREFERRED_RETAILERS = [
-  "amazon",
-  "target",
-  "walmart",
-  "bestbuy",
-  "best buy",
-  "nordstrom",
+  'nordstrom', 'macys', 'zappos', 'asos', 'revolve',
+  'abercrombie', 'anthropologie', 'urban outfitters',
+  'gap', 'h&m', 'zara', 'amazon', 'target', 'walmart'
 ];
 
 function pickBestSeller(sellers: OnlineSeller[]): OnlineSeller | null {
@@ -355,8 +371,6 @@ function transformProducts(items: any[]): Product[] {
 // endpoint, reads product_results.stores, and picks the best direct retailer URL
 // by priority. Fires in parallel for top 3 only after D5 scoring.
 // Falls back to original product link on any failure or missing field.
-const RETAILER_PRIORITY = ['amazon', 'target', 'walmart', 'best buy', 'nordstrom'];
-
 async function resolveTop3Urls(products: Product[]): Promise<Product[]> {
   const top3 = products.slice(0, 3);
   const rest = products.slice(3);
@@ -390,7 +404,7 @@ async function resolveTop3Urls(products: Product[]): Promise<Product[]> {
         let directUrl: string | null = null;
         let retailerName: string | null = null;
 
-        for (const preferred of RETAILER_PRIORITY) {
+        for (const preferred of PREFERRED_RETAILERS) {
           const match = stores.find((s: any) =>
             (s.name ?? '').toLowerCase().includes(preferred)
           );
@@ -426,6 +440,150 @@ async function resolveTop3Urls(products: Product[]): Promise<Product[]> {
   );
 
   return [...resolved, ...rest];
+}
+
+// Generates an embedding vector for a search query string.
+// Used to find semantically similar products in the pgvector index.
+// Returns null on any failure — callers must handle null.
+async function generateQueryEmbedding(query: string): Promise<number[] | null> {
+  try {
+    const response = await openai.embeddings.create({
+      model: 'text-embedding-3-small',
+      input: query,
+      dimensions: 1536,
+    });
+    return response.data[0]?.embedding ?? null;
+  } catch (err) {
+    console.error('[catalog] embedding generation failed:', err);
+    return null;
+  }
+}
+
+// Attempts to serve product results from the Supabase catalog using
+// pgvector similarity search + SQL filters.
+//
+// Returns Product[] if the catalog has >= CATALOG_MIN_RESULTS results
+// above CATALOG_SIMILARITY_THRESHOLD that pass the hard constraint filters.
+//
+// Returns null if the catalog has insufficient confident matches or any error occurs.
+// Callers must treat null as "fall through to SerpAPI".
+// This function must never throw — all errors are caught and return null.
+async function retrieveFromCatalog(
+  intent: IntentExtractionResult
+): Promise<Product[] | null> {
+  try {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      console.warn('[catalog] Supabase client unavailable — skipping catalog');
+      return null;
+    }
+
+    const embedding = await generateQueryEmbedding(intent.search_query);
+    if (!embedding) {
+      console.warn('[catalog] Could not generate query embedding — falling through to SerpAPI');
+      return null;
+    }
+
+    const { data: rawProducts, error } = await supabase.rpc('match_products', {
+      query_embedding: embedding,
+      similarity_threshold: CATALOG_SIMILARITY_THRESHOLD,
+      match_count: CATALOG_FETCH_LIMIT,
+    });
+
+    if (error) {
+      console.error('[catalog] pgvector query failed:', error.message);
+      return null;
+    }
+
+    if (!rawProducts || rawProducts.length === 0) {
+      console.log('[catalog] No results above similarity threshold — falling through to SerpAPI');
+      return null;
+    }
+
+    // Fetch pricing for matched products.
+    // Pick one pricing row per product — prefer in_stock, then lowest price.
+    const productIds = rawProducts.map((p: any) => p.id);
+
+    const { data: pricingRows, error: pricingError } = await supabase
+      .from('product_pricing')
+      .select('product_id, merchant, affiliate_url, price_cents, sale_price_cents, availability')
+      .in('product_id', productIds)
+      .eq('availability', 'in_stock')
+      .order('price_cents', { ascending: true });
+
+    if (pricingError) {
+      console.error('[catalog] pricing query failed:', pricingError.message);
+      return null;
+    }
+
+    // Build a map of product_id → best pricing row (already sorted lowest price first).
+    const pricingMap = new Map<number, any>();
+    for (const row of pricingRows ?? []) {
+      if (!pricingMap.has(row.product_id)) {
+        pricingMap.set(row.product_id, row);
+      }
+    }
+
+    const { budget_ceiling, budget_floor, must_have_attributes } = intent.hard_constraints;
+
+    const products: Product[] = [];
+
+    for (const raw of rawProducts) {
+      const pricing = pricingMap.get(raw.id);
+      if (!pricing) continue;
+
+      const priceDollars = pricing.price_cents != null ? pricing.price_cents / 100 : null;
+
+      if (budget_ceiling != null && priceDollars != null && priceDollars > budget_ceiling) continue;
+      if (budget_floor != null && priceDollars != null && priceDollars < budget_floor) continue;
+
+      // Attribute match proxy — same approach as D5-interim for SerpAPI results.
+      // Real attribute matching will use structured specs once Kevin's K3/K4 pipeline
+      // populates the attributes JSONB column.
+      if (must_have_attributes && must_have_attributes.length > 0) {
+        const titleLower = (raw.title ?? '').toLowerCase();
+        const allMatch = must_have_attributes.every((attr: string) =>
+          titleLower.includes(attr.toLowerCase())
+        );
+        if (!allMatch) continue;
+      }
+
+      const priceStr = priceDollars != null ? `$${priceDollars.toFixed(2)}` : '';
+
+      products.push({
+        name: raw.title ?? 'Unknown Product',
+        cat: pricing.merchant ?? 'Fashion',
+        desc: `Sold by ${pricing.merchant ?? 'retailer'}`,
+        price: priceStr,
+        num: priceDollars ?? 0,
+        rating: raw.attributes?.rating != null ? String(raw.attributes.rating) : '0',
+        reviews: raw.attributes?.review_count != null
+          ? formatReviews(raw.attributes.review_count)
+          : '0',
+        match: `${Math.round((raw.similarity ?? 0) * 100)}%`,
+        img: (raw.image_urls ?? [])[0] ?? '',
+        link: pricing.affiliate_url ?? '',
+        product_id: raw.external_id ?? null,
+        serpapi_immersive_product_api: null,
+        affiliate_degraded: !pricing.affiliate_url,
+        explanation: undefined,
+      });
+    }
+
+    if (products.length < CATALOG_MIN_RESULTS) {
+      console.log(
+        `[catalog] ${products.length} results after filtering — below minimum of ${CATALOG_MIN_RESULTS}, falling through to SerpAPI`
+      );
+      return null;
+    }
+
+    console.log(`[catalog] Serving ${products.length} results from catalog (similarity >= ${CATALOG_SIMILARITY_THRESHOLD})`);
+    return products;
+
+  } catch (err) {
+    console.error('[catalog] Unexpected error in retrieveFromCatalog:', err);
+    return null;
+  }
 }
 
 // D6: Fires in parallel with callSerpAPIBatch — takes only the intent summary so it
@@ -474,7 +632,7 @@ Rules:
   }
 }
 
-// POST: LLM intent extraction → SerpAPI batch → D5 scoring → price/attr filter → D10 URL resolution → attach explanations
+// POST: LLM intent extraction → catalog (pgvector) → SerpAPI fallback → price/attr filter → D10 URL resolution → D6 explanations
 export async function POST(request: NextRequest) {
   const { query, history, accumulatedIntent, skipClarification } = await request.json();
 
@@ -484,7 +642,15 @@ export async function POST(request: NextRequest) {
 
   if (!query) return NextResponse.json({ error: "Query required" }, { status: 400 });
   if (!process.env.SERPAPI_API_KEY) {
-    return NextResponse.json({ error: "SERPAPI_API_KEY not configured" }, { status: 500 });
+    return NextResponse.json({ error: 'SERPAPI_API_KEY not configured' }, { status: 500 });
+  }
+
+  // Catalog is optional — missing vars disable catalog path, SerpAPI serves all requests.
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.warn('[catalog] SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set — catalog retrieval disabled');
+  }
+  if (!process.env.OPENAI_API_KEY) {
+    console.warn('[catalog] OPENAI_API_KEY not set — catalog retrieval disabled (embeddings unavailable)');
   }
 
   const intent = await extractIntent(query, history);
@@ -504,55 +670,76 @@ export async function POST(request: NextRequest) {
   const baseQuery = intent.search_query || query;
   const searchQueries = buildSearchQueries(baseQuery, intent);
 
-  console.log("[Search] Queries:", searchQueries);
+  console.log('[search] queries:', searchQueries);
 
-  // D6 fires in parallel with SerpAPI — uses only intent summary, no product names needed
-  let rawItems: any[];
-  let queryOrigins: Map<string, number>;
+  // Attempt catalog retrieval first.
+  // null means the catalog cannot serve this request confidently — fall through to SerpAPI.
+  const catalogProducts = await retrieveFromCatalog(intent);
+
+  let rawProducts: Product[];
   let explanations: string[];
-  try {
-    let batchResult: { items: any[]; queryOrigins: Map<string, number> };
-    [batchResult, explanations] = await Promise.all([
-      callSerpAPIBatch(searchQueries),
-      generateExplanations(intent.raw_intent_summary),
-    ]);
-    rawItems = batchResult.items;
-    queryOrigins = batchResult.queryOrigins;
 
-    if (rawItems.length === 0) {
-      console.warn("[POST /api/search] SerpAPI returned 0 results for queries:", searchQueries);
-      return NextResponse.json({
-        products: [],
-        chatResponse:
-          "I couldn't find results for that — could you describe what you're looking for differently?",
-        clarificationNeeded: false,
-        intent,
-      });
+  if (catalogProducts !== null) {
+    // --- Catalog path ---
+    // Enough high-confidence results returned. Skip SerpAPI entirely.
+    // D6 still fires — it only needs the intent summary, not product data.
+    console.log('[search] serving from catalog');
+    try {
+      explanations = await generateExplanations(intent.raw_intent_summary);
+    } catch (err) {
+      console.warn('[D6] explanation generation failed — continuing without explanations:', err);
+      explanations = [];
     }
-  } catch (err) {
-    console.error("[POST /api/search] SerpAPI failed:", err);
-    return NextResponse.json(
-      {
-        error: "Search service unavailable",
-        products: [],
-        chatResponse: "I'm having trouble searching right now — please try again in a moment.",
-        clarificationNeeded: false,
-        intent,
-      },
-      { status: 502 }
-    );
+    rawProducts = catalogProducts;
+
+  } else {
+    // --- SerpAPI fallback path ---
+    // Catalog miss or insufficient confidence. Behaviour unchanged from before.
+    console.log('[search] catalog miss — falling through to SerpAPI');
+    try {
+      let batchResult: { items: any[]; queryOrigins: Map<string, number> };
+      [batchResult, explanations] = await Promise.all([
+        callSerpAPIBatch(searchQueries),
+        generateExplanations(intent.raw_intent_summary),
+      ]);
+
+      const { items: rawItems, queryOrigins } = batchResult;
+
+      if (rawItems.length === 0) {
+        console.warn('[POST /api/search] SerpAPI returned 0 results for queries:', searchQueries);
+        return NextResponse.json({
+          products: [],
+          chatResponse: "I couldn't find results for that — could you describe what you're looking for differently?",
+          clarificationNeeded: false,
+          intent,
+        });
+      }
+
+      const serpProducts = transformProducts(rawItems);
+      rawProducts = scoreAndRankProducts(serpProducts, intent, queryOrigins);
+
+    } catch (err) {
+      console.error('[POST /api/search] SerpAPI failed:', err);
+      return NextResponse.json(
+        {
+          error: 'Search service unavailable',
+          products: [],
+          chatResponse: "I'm having trouble searching right now — please try again in a moment.",
+          clarificationNeeded: false,
+          intent,
+        },
+        { status: 502 }
+      );
+    }
   }
 
-  const rawProducts = transformProducts(rawItems);
-
-  // [D5-interim] Reorder by constraint satisfaction + quality signals
-  const rankedProducts = scoreAndRankProducts(rawProducts, intent, queryOrigins);
+  // From this point on, rawProducts is populated regardless of which path served it.
 
   // Filter BEFORE resolveTop3Urls so URL resolution targets the 3 cards the user actually sees.
   // If filtering removes everything, fall back to unfiltered ranked list.
   const { budget_ceiling, budget_floor, must_have_attributes } = intent.hard_constraints;
 
-  let filteredProducts = [...rankedProducts];
+  let filteredProducts = [...rawProducts];
 
   if (budget_ceiling) {
     filteredProducts = filteredProducts.filter((p) => p.num > 0 && p.num <= budget_ceiling);
@@ -570,19 +757,24 @@ export async function POST(request: NextRequest) {
   }
 
   let priceFilterApplied = true;
-  if (filteredProducts.length === 0 && rankedProducts.length > 0) {
+  if (filteredProducts.length === 0 && rawProducts.length > 0) {
     console.warn(
       "[POST /api/search] Filters removed all results — returning unfiltered. Query:",
       searchQueries
     );
-    filteredProducts = rankedProducts;
+    filteredProducts = rawProducts;
     priceFilterApplied = false;
   }
 
   // [D10] Resolve direct retailer URLs for the top 3 visible products — parallel SerpAPI
   // immersive calls. Runs after filtering so the 3 resolved products match the 3 UI cards.
   // Falls back to SerpAPI product_link on any failure. Products 4+ keep product_link.
-  filteredProducts = await resolveTop3Urls(filteredProducts);
+  // Catalog results already contain direct affiliate URLs — resolveTop3Urls
+  // is only needed for SerpAPI results, which return Google Shopping redirect
+  // links that require immersive endpoint resolution.
+  filteredProducts = catalogProducts !== null
+    ? filteredProducts
+    : await resolveTop3Urls(filteredProducts);
 
   const chatResponse = !priceFilterApplied
     ? "Here are the closest options I found."
