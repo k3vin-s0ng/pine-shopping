@@ -21,6 +21,11 @@ const openai = new OpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
+// Separate client for embeddings — OpenRouter does not support the embeddings API.
+const embeddingsClient = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
 const MODEL = "openai/gpt-4o-mini";
 
 // Initialised lazily so missing env vars don't crash the module at import time.
@@ -447,7 +452,7 @@ async function resolveTop3Urls(products: Product[]): Promise<Product[]> {
 // Returns null on any failure — callers must handle null.
 async function generateQueryEmbedding(query: string): Promise<number[] | null> {
   try {
-    const response = await openai.embeddings.create({
+    const response = await embeddingsClient.embeddings.create({
       model: 'text-embedding-3-small',
       input: query,
       dimensions: 1536,
