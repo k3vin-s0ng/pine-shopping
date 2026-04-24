@@ -1,6 +1,6 @@
 # Pine — Active Task Board
 
-_Updated: 2026-04-21 (Catalog-first retrieval wired in route.ts — retrieveFromCatalog() + pgvector similarity search + SerpAPI fallback. Fashion intent fields added to IntentExtractionResult and prompt. PREFERRED_RETAILERS consolidated.) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
+_Updated: 2026-04-24 (K-catalog-normalize complete: schema migration, re-ingest with delivery fields. K-catalog-5 demand-driven refresh cron added. B-09 affiliate feed scope decision added.) | Owner tags: [D] = Daniel, [K] = Kevin, [E] = Eric_
 
 ---
 
@@ -11,6 +11,7 @@ _Updated: 2026-04-21 (Catalog-first retrieval wired in route.ts — retrieveFrom
 | B-05 | TypeScript dropped for JSX in component layer | [K]/[D] | All new components are `.jsx` with no type annotations. Breaks TypeScript-strict convention in CLAUDE.md. Decision needed: migrate new components to TSX or accept JSX for UI layer. |
 | B-02 | Daniel↔Kevin Data Agent handoff contract | [D]/[K] | Schema defined in CLAUDE.md. Needs explicit agreement from Kevin before K2+ and D5+ can be built. Priority: next team meeting. |
 | B-07 | Catalog sub-category + retailer scope not yet decided | [D] | **Fashion niche decided. Now decide which sub-categories and retailers to seed first.** Recommendation: retailers = Nordstrom + ASOS + Amazon; categories = women's dresses, men's casualwear, footwear, outerwear. Blocks D-catalog-3 and D-catalog-2. Timebox: 30 minutes with Kevin. |
+| B-09 | Affiliate feed integration scope decision | [D] | Skimlinks Data Pipe, Impact.com, CJ Affiliate. Promoted from Phase 4. Decision needed: which merchants to target first. Does Skimlinks Data Pipe require a separate application from the existing affiliate account? |
 
 ---
 
@@ -34,6 +35,8 @@ _Updated: 2026-04-21 (Catalog-first retrieval wired in route.ts — retrieveFrom
 | D-catalog-0 | DataForSEO validation gate | [D] | Sign up for DataForSEO ($1 trial). Run Pine's top 10 real queries through Products → Sellers → Ad URL. Measure: (1) direct URL coverage — target ≥85%, (2) field parity with SerpAPI response, (3) cost per query. Write `docs/dataforseo-validation.md` with go/no-go. **Blocks all remaining catalog work.** If coverage <85%, escalate — affiliate feed strategy changes. |
 | D-catalog-1 | Postgres + pgvector on Supabase — provision and schema | [D] | Provision Supabase (Pro plan, $25/mo flat). Enable extensions: `pgvector`, `pg_trgm`, `ltree`. Run migrations (see CLAUDE.md for schema). Tables: `products`, `product_pricing`, `price_history`, `categories`. Indexes: HNSW on `embedding` (halfvec 1536), GIN on `tsvector`, GIN on `attributes JSONB`, composite on `(category_id, price_cents) WHERE availability='in_stock'`. Use HNSW — not IVFFlat. |
 | D-catalog-4 | Redis cache layer (Upstash) | [D] | Provision Upstash Redis (free tier to start, ~$10/mo at scale). Implement cache-aside: key = normalized intent hash, 1h TTL on result sets, 6h on product metadata. Write-through on every SerpAPI live fallback hit. Sits in front of Postgres in the retrieval path. |
+| last_queried_at wiring | Fire-and-forget demand tracking in retrieveFromCatalog | [D] | Wire the non-blocking `last_queried_at` update in `route.ts` after `retrieveFromCatalog()` returns. `returnedProductIds` must be available before response is assembled. Do not await. Do not let failure affect response latency. |
+| K-catalog-5 | Demand-driven price refresh cron | [K] | Weekly cron: `SELECT products WHERE last_queried_at > now() - interval '7 days'`. Refresh only hot products via DataForSEO Sellers endpoint. At 50K products, realistic hot set is 2K–5K = ~$2–5/week vs $150/week full-catalog. Blocked on K-catalog-2 full batch completing. See PLAN.md for spec. |
 | K-reddit-1 | Subreddit scope + scraping pipeline | [K] | Fashion subreddits: r/femalefashionadvice, r/malefashionadvice, r/frugalmalefashion, r/streetwear, r/buyitforlife (quality signals for accessories + outerwear). Build batch scraper: top posts (all-time + past year) + comments → extract product mentions, brand names, sentiment. Scheduled weekly batch — never real-time. |
 
 ### Week 1 — Catalog Ingestion + Reddit Signal Extraction
@@ -180,6 +183,11 @@ _Updated: 2026-04-21 (Catalog-first retrieval wired in route.ts — retrieveFrom
 | ✓ | **Fashion intent fields added to IntentExtractionResult + prompt** — `hard_constraints`: `size`, `gender_presentation`. `soft_preferences`: `fit_preference`, `color_palette`, `season`, `style_avoid`. FASHION CONTEXT section added to `intentExtractionPrompt.ts` with 6 worked examples. `mergeIntent()` updated to accumulate `color_palette` and `style_avoid` as sets. | 2026-04-21 |
 | ✓ | **PREFERRED_RETAILERS consolidated** — Duplicate arrays (`PREFERRED_RETAILERS` + `RETAILER_PRIORITY`) merged into single constant at top of `route.ts`, updated to full fashion retailer list per CLAUDE.md. | 2026-04-21 |
 | ✓ | **D-catalog-retrieve: Catalog-first retrieval wired in route.ts** — `getSupabaseClient()` (lazy init), `generateQueryEmbedding()` (OpenAI text-embedding-3-small via existing openai instance), `retrieveFromCatalog()` (pgvector similarity ≥ 0.72 + pricing join + hard constraint filters + min 3 results gate). POST handler: catalog path → SerpAPI else path. Filter/resolveTop3Urls/D6 pipeline unchanged. Run `match_products` RPC SQL in Supabase SQL Editor before testing. | 2026-04-21 |
+| ✓ | **Embeddings client bug fixed** — `generateQueryEmbedding()` was using the OpenRouter-configured `openai` client, which doesn't support the embeddings API. Every catalog embedding call silently failed and fell through to SerpAPI. Fix: dedicated `embeddingsClient` using `OPENAI_API_KEY`. | 2026-04-23 |
+| ✓ | **K-catalog-2: Normalize step** — Merchant cap (`MAX_MERCHANTS_PER_PRODUCT = 3`) applied before DB write; sellers sorted trusted-merchant-first → rating desc → price asc, then sliced. `parseDelivery()` extracts `shipping_cents`, `delivery_message`, `delivery_date_min/max` from DFSEO seller items. `last_queried_at` fire-and-forget update on served product IDs in `retrieveFromCatalog`. Requires `last_queried_at` column migration (SQL in K-catalog-2 spec) and delivery columns on `product_pricing` (already ran). | 2026-04-23 |
+| ✓ | **ProductCandidate abstraction + unified D5 scoring** — `ProductCandidate` type with `source`/`retrieval`/`enriched` slots replaces bare `Product` in the POST handler pipeline. `scoreCandidate()` + `scoreAndRankCandidates()` run uniformly on catalog and SerpAPI results. Catalog similarity feeds as tie-breaker. `resolveTop3SerpAPICandidates()` only fires immersive URL resolution for SerpAPI candidates. | 2026-04-23 |
+| ✓ | **Schema migration — delivery + demand columns** — `shipping_cents`, `delivery_message`, `delivery_date_min`, `delivery_date_max` added to `product_pricing`. `last_queried_at` added to `products`. Cleanup SQL ran against existing 605 pricing rows — trimmed to MAX 3 merchants per product. | 2026-04-23 |
+| ✓ | **K-catalog-normalize — ingest normalize step complete** — `parseDelivery()` implemented, merchant cap (MAX=3) enforced, fashion-native merchant priority applied, `last_queried_at` fire-and-forget wired. Re-ingest completed with shipping/delivery fields now populated. | 2026-04-23 |
 
 ---
 

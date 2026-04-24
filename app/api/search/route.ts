@@ -44,6 +44,31 @@ interface OnlineSeller {
   extracted_price?: number;
 }
 
+type ProductCandidateSource = 'catalog' | 'serpapi' | 'data_agent';
+
+interface ProductCandidate {
+  source: ProductCandidateSource;
+  product: Product;
+  retrieval?: {
+    similarity?: number;
+    queryRank?: number;
+  };
+  enriched?: {
+    specs?: Record<string, unknown>;
+    review_signals?: {
+      quality_signal?: string;
+      fit_signal?: string;
+      value_signal?: string;
+      avg_rating?: number;
+      review_count?: number;
+    };
+    constraint_satisfaction?: {
+      hard_constraints_met?: boolean;
+      soft_preference_score?: number | null;
+    };
+  };
+}
+
 const PREFERRED_RETAILERS = [
   'nordstrom', 'macys', 'zappos', 'asos', 'revolve',
   'abercrombie', 'anthropologie', 'urban outfitters',
@@ -125,19 +150,26 @@ function parseReviewCount(reviewStr: string | null | undefined): number {
   return parseInt(s) || 0;
 }
 
-// [D5-interim] Scores a single product against the user's extracted intent.
-// Uses only fields available from SerpAPI's shopping response.
+// [D5-interim] Scores a single candidate against the user's extracted intent.
+// Uses sparse Product fields today and leaves room for enriched Data Agent fields.
 // Returns a numeric score — higher is better. No floor or ceiling.
-// Will be replaced by full utility scoring against Kevin's enriched result
-// objects (K5) in Phase 2.
-function scoreProduct(
-  product: Product,
-  intent: IntentExtractionResult,
-  queryRank: number  // 0 = primary query, 1 = first related, 2 = second related
+function scoreCandidate(
+  candidate: ProductCandidate,
+  intent: IntentExtractionResult
 ): number {
   let score = 0;
+  const { product } = candidate;
   const price = parsePrice(product.price);
   const nameLower = (product.name ?? '').toLowerCase();
+
+  if (candidate.enriched?.constraint_satisfaction?.hard_constraints_met === false) {
+    score -= 100;
+  }
+
+  const softPreferenceScore = candidate.enriched?.constraint_satisfaction?.soft_preference_score;
+  if (typeof softPreferenceScore === 'number') {
+    score += softPreferenceScore * 20;
+  }
 
   // --- Hard constraint: budget ceiling ---
   // Hard violation — push well below any compliant product
@@ -196,42 +228,78 @@ function scoreProduct(
   // --- Query source weight ---
   // Primary query is the most precise expression of user intent.
   // Penalise related query results slightly so ties break in favour of primary.
-  score -= queryRank * 5;
+  if (typeof candidate.retrieval?.queryRank === 'number') {
+    score -= candidate.retrieval.queryRank * 5;
+  }
+
+  // --- Retrieval confidence ---
+  // Catalog similarity is a useful tie breaker, but should not overpower user utility.
+  if (typeof candidate.retrieval?.similarity === 'number') {
+    score += candidate.retrieval.similarity * 10;
+  }
 
   return score;
 }
 
-// [D5-interim] Scores all products and returns them sorted highest-score-first.
-// queryOrigins maps each product's name to its query rank (0/1/2).
-// Products with identical scores retain their original relative order (stable sort).
-function scoreAndRankProducts(
-  products: Product[],
-  intent: IntentExtractionResult,
-  queryOrigins: Map<string, number>
-): Product[] {
-  const scored = products.map((product) => ({
+function parseMatchPercent(match: string | undefined): number | undefined {
+  if (!match) return undefined;
+  const parsed = parseFloat(match.replace('%', ''));
+  if (Number.isNaN(parsed)) return undefined;
+  return parsed / 100;
+}
+
+function toCatalogCandidates(products: Product[]): ProductCandidate[] {
+  return products.map((product) => ({
+    source: 'catalog' as const,
     product,
-    score: scoreProduct(
-      product,
-      intent,
-      queryOrigins.get(product.name) ?? 1 // default to related-query weight if unknown
-    ),
+    retrieval: {
+      similarity: parseMatchPercent(product.match),
+    },
+  }));
+}
+
+function toSerpAPICandidates(
+  products: Product[],
+  queryOrigins: Map<string, number>
+): ProductCandidate[] {
+  return products.map((product) => ({
+    source: 'serpapi' as const,
+    product,
+    retrieval: {
+      queryRank: queryOrigins.get(product.name) ?? 1,
+    },
+  }));
+}
+
+// [D5-interim] Scores all candidates and returns them sorted highest-score-first.
+// Candidates with identical scores retain their original relative order (stable sort).
+function scoreAndRankCandidates(
+  candidates: ProductCandidate[],
+  intent: IntentExtractionResult
+): ProductCandidate[] {
+  const scored = candidates.map((candidate, index) => ({
+    candidate,
+    index,
+    score: scoreCandidate(candidate, intent),
   }));
 
   // Log top 5 scores for observability — remove in Phase 2 when D5-full replaces this
   const top5 = [...scored]
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => b.score - a.score || a.index - b.index)
     .slice(0, 5);
   console.log('[D5-interim scores]', top5.map(s => ({
-    title: s.product.name.slice(0, 40),
+    title: s.candidate.product.name.slice(0, 40),
+    source: s.candidate.source,
     score: s.score,
-    price: s.product.price,
-    rating: s.product.rating,
+    price: s.candidate.product.price,
+    rating: s.candidate.product.rating,
+    similarity: s.candidate.retrieval?.similarity,
+    queryRank: s.candidate.retrieval?.queryRank,
   })));
 
   return scored
-    .sort((a, b) => b.score - a.score)
-    .map(s => s.product);
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map(s => s.candidate);
 }
 
 function buildSearchQueries(baseQuery: string, intent: any): string[] {
@@ -447,6 +515,26 @@ async function resolveTop3Urls(products: Product[]): Promise<Product[]> {
   return [...resolved, ...rest];
 }
 
+async function resolveTop3SerpAPICandidates(
+  candidates: ProductCandidate[]
+): Promise<ProductCandidate[]> {
+  const serpProductsInTop3 = candidates
+    .slice(0, 3)
+    .filter((candidate) => candidate.source === 'serpapi')
+    .map((candidate) => candidate.product);
+
+  if (serpProductsInTop3.length === 0) return candidates;
+
+  const resolvedSerpProducts = await resolveTop3Urls(serpProductsInTop3);
+  let resolvedIndex = 0;
+
+  return candidates.map((candidate, index) => {
+    if (index >= 3 || candidate.source !== 'serpapi') return candidate;
+    const product = resolvedSerpProducts[resolvedIndex++] ?? candidate.product;
+    return { ...candidate, product };
+  });
+}
+
 // Generates an embedding vector for a search query string.
 // Used to find semantically similar products in the pgvector index.
 // Returns null on any failure — callers must handle null.
@@ -532,6 +620,7 @@ async function retrieveFromCatalog(
     const { budget_ceiling, budget_floor, must_have_attributes } = intent.hard_constraints;
 
     const products: Product[] = [];
+    const servedIds: number[] = [];
 
     for (const raw of rawProducts) {
       const pricing = pricingMap.get(raw.id);
@@ -573,6 +662,7 @@ async function retrieveFromCatalog(
         affiliate_degraded: !pricing.affiliate_url,
         explanation: undefined,
       });
+      servedIds.push(raw.id);
     }
 
     if (products.length < CATALOG_MIN_RESULTS) {
@@ -581,6 +671,13 @@ async function retrieveFromCatalog(
       );
       return null;
     }
+
+    // Non-blocking — do not await, do not let failure affect response
+    supabase
+      .from('products')
+      .update({ last_queried_at: new Date().toISOString() })
+      .in('id', servedIds)
+      .then(() => {}, () => {});
 
     console.log(`[catalog] Serving ${products.length} results from catalog (similarity >= ${CATALOG_SIMILARITY_THRESHOLD})`);
     return products;
@@ -681,7 +778,7 @@ export async function POST(request: NextRequest) {
   // null means the catalog cannot serve this request confidently — fall through to SerpAPI.
   const catalogProducts = await retrieveFromCatalog(intent);
 
-  let rawProducts: Product[];
+  let candidates: ProductCandidate[];
   let explanations: string[];
 
   if (catalogProducts !== null) {
@@ -695,7 +792,7 @@ export async function POST(request: NextRequest) {
       console.warn('[D6] explanation generation failed — continuing without explanations:', err);
       explanations = [];
     }
-    rawProducts = catalogProducts;
+    candidates = toCatalogCandidates(catalogProducts);
 
   } else {
     // --- SerpAPI fallback path ---
@@ -720,8 +817,7 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      const serpProducts = transformProducts(rawItems);
-      rawProducts = scoreAndRankProducts(serpProducts, intent, queryOrigins);
+      candidates = toSerpAPICandidates(transformProducts(rawItems), queryOrigins);
 
     } catch (err) {
       console.error('[POST /api/search] SerpAPI failed:', err);
@@ -738,36 +834,41 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // From this point on, rawProducts is populated regardless of which path served it.
+  // From this point on, candidates are populated regardless of which path served them.
+  // D5-interim runs once for catalog and SerpAPI so ranking behavior is consistent.
+  const rankedCandidates = scoreAndRankCandidates(candidates, intent);
 
   // Filter BEFORE resolveTop3Urls so URL resolution targets the 3 cards the user actually sees.
   // If filtering removes everything, fall back to unfiltered ranked list.
   const { budget_ceiling, budget_floor, must_have_attributes } = intent.hard_constraints;
 
-  let filteredProducts = [...rawProducts];
+  let filteredCandidates = [...rankedCandidates];
 
   if (budget_ceiling) {
-    filteredProducts = filteredProducts.filter((p) => p.num > 0 && p.num <= budget_ceiling);
+    filteredCandidates = filteredCandidates.filter((candidate) => {
+      const { product } = candidate;
+      return product.num > 0 && product.num <= budget_ceiling;
+    });
   }
 
   if (budget_floor) {
-    filteredProducts = filteredProducts.filter((p) => p.num >= budget_floor);
+    filteredCandidates = filteredCandidates.filter((candidate) => candidate.product.num >= budget_floor);
   }
 
   if (must_have_attributes && must_have_attributes.length > 0) {
     const attrs = must_have_attributes.map((a) => a.toLowerCase());
-    filteredProducts = filteredProducts.filter((p) =>
-      attrs.some((attr) => p.name.toLowerCase().includes(attr))
+    filteredCandidates = filteredCandidates.filter((candidate) =>
+      attrs.some((attr) => candidate.product.name.toLowerCase().includes(attr))
     );
   }
 
   let priceFilterApplied = true;
-  if (filteredProducts.length === 0 && rawProducts.length > 0) {
+  if (filteredCandidates.length === 0 && rankedCandidates.length > 0) {
     console.warn(
       "[POST /api/search] Filters removed all results — returning unfiltered. Query:",
       searchQueries
     );
-    filteredProducts = rawProducts;
+    filteredCandidates = rankedCandidates;
     priceFilterApplied = false;
   }
 
@@ -777,9 +878,15 @@ export async function POST(request: NextRequest) {
   // Catalog results already contain direct affiliate URLs — resolveTop3Urls
   // is only needed for SerpAPI results, which return Google Shopping redirect
   // links that require immersive endpoint resolution.
-  filteredProducts = catalogProducts !== null
-    ? filteredProducts
-    : await resolveTop3Urls(filteredProducts);
+  const needsSerpApiUrlResolution = filteredCandidates
+    .slice(0, 3)
+    .some((candidate) => candidate.source === 'serpapi');
+
+  if (needsSerpApiUrlResolution) {
+    filteredCandidates = await resolveTop3SerpAPICandidates(filteredCandidates);
+  }
+
+  let filteredProducts = filteredCandidates.map((candidate) => candidate.product);
 
   const chatResponse = !priceFilterApplied
     ? "Here are the closest options I found."

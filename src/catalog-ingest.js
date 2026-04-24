@@ -61,7 +61,6 @@ const CONFIG = {
 // The ingestion pipeline picks the highest-ranked retailer that returns
 // a valid direct URL and marks it as the primary affiliate_url.
 const RETAILER_PRIORITY = [
-  'amazon.com',
   'nordstrom.com',
   'macys.com',
   'zappos.com',
@@ -76,6 +75,22 @@ const RETAILER_PRIORITY = [
   'target.com',
   'walmart.com',
 ];
+
+// Maximum number of merchants stored per product.
+// Keeps product_pricing lean and weekly refresh cost bounded.
+const MAX_MERCHANTS_PER_PRODUCT = 3;
+
+// Merchants where null shipping_price is safely treated as free (0).
+// Add only merchants with confirmed free-shipping programs.
+const FREE_SHIPPING_MERCHANTS = [
+  'Nordstrom', 'nordstrom.com',
+  'ASOS', 'asos.com',
+  'Revolve', 'revolve.com',
+  'Shopbop', 'shopbop.com',
+  'SSENSE', 'ssense.com',
+  'Farfetch', 'farfetch.com',
+];
+
 
 // ---------------------------------------------------------------------------
 // Seed queries — fashion only
@@ -278,6 +293,10 @@ function extractUniqueProducts(result) {
   return items;
 }
 
+function isTrustedMerchant(name) {
+  return FREE_SHIPPING_MERCHANTS.some(m => name?.toLowerCase().includes(m.toLowerCase()));
+}
+
 // Select the highest-priority retailer with a valid direct URL.
 // Falls back to the first available direct URL if no preferred retailer matches.
 function selectPrimaryRetailer(sellers) {
@@ -297,22 +316,106 @@ function selectPrimaryRetailer(sellers) {
   return valid[0];
 }
 
+function toIsoDate(raw) {
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString().split('T')[0];
+}
+
+function extractDeadlineDate(msg) {
+  if (!msg) return null;
+  try {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+
+    const MONTHS = {
+      jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+      jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+      january: 0, february: 1, march: 2, april: 3, june: 5,
+      july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
+    };
+
+    function parseDateParts(monthStr, dayStr) {
+      const monthIdx = MONTHS[monthStr.toLowerCase()];
+      if (monthIdx === undefined) return null;
+      const day = parseInt(dayStr, 10);
+      if (isNaN(day)) return null;
+      const year = monthIdx < currentMonth ? currentYear + 1 : currentYear;
+      const d = new Date(year, monthIdx, day);
+      return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
+    }
+
+    // Pattern 1: "by Mon, Aug 12" or "by Aug 12"
+    let m = msg.match(/\bby\s+(?:\w+,\s+)?([A-Za-z]+)\s+(\d{1,2})\b/i);
+    if (m) return parseDateParts(m[1], m[2]);
+
+    // Pattern 2: "Aug 12 – Aug 15" or "Aug 12 - Aug 15" — return later date
+    m = msg.match(/([A-Za-z]+)\s+(\d{1,2})\s*[–\-]\s*([A-Za-z]+)\s+(\d{1,2})/i);
+    if (m) return parseDateParts(m[3], m[4]);
+
+    // Pattern 3: "within N days" / "in N–M days" / "ships in N days" — use larger N
+    m = msg.match(/(?:within|in|ships\s+in)\s+(?:\d+[–\-])?(\d+)\s+days/i);
+    if (m) {
+      const days = parseInt(m[1], 10);
+      if (!isNaN(days)) {
+        return new Date(Date.now() + days * 86_400_000).toISOString().split('T')[0];
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Extracts shipping and delivery fields from a raw DataForSEO seller item.
+// Returns nulls cleanly on absent or unparseable fields — never throws.
+function parseDelivery(item) {
+  let shipping_cents =
+    typeof item.shipping_price === 'number'
+      ? Math.round(item.shipping_price * 100)
+      : null;
+
+  if (shipping_cents === null && isTrustedMerchant(item.seller_name)) {
+    shipping_cents = 0;
+  }
+
+  const delivery_message = item.delivery_info?.delivery_message ?? null;
+  let delivery_date_min = toIsoDate(item.delivery_info?.delivery_date_from) ?? null;
+  let delivery_date_max = toIsoDate(item.delivery_info?.delivery_date_to) ?? null;
+
+  if (!delivery_date_max && delivery_message) {
+    delivery_date_max = extractDeadlineDate(delivery_message) ?? null;
+  }
+
+  return { shipping_cents, delivery_message, delivery_date_min, delivery_date_max };
+}
+
 // Map all valid sellers to product_pricing rows.
 function mapSellersTopricing(sellers, productId) {
   return sellers
     .filter(s => s.url && !s.url.includes('google.com'))
-    .map(s => ({
-      product_id: productId,
-      merchant: s.seller_name ?? s.domain,
-      affiliate_url: s.url,
-      price_cents: s.base_price != null ? Math.round(s.base_price * 100) : null,
-      sale_price_cents: (s.total_price != null && s.total_price < s.base_price)
-        ? Math.round(s.total_price * 100)
-        : null,
-      availability: s.product_availability ?? 'unknown',
-      retailer_sku: null,  // populated downstream by retailer scraping layer
-      refreshed_at: new Date().toISOString(),
-    }));
+    .map(s => {
+      const delivery = parseDelivery(s);
+      return {
+        product_id: productId,
+        merchant: s.seller_name ?? s.domain,
+        affiliate_url: s.url,
+        price_cents: s.base_price != null ? Math.round(s.base_price * 100) : null,
+        sale_price_cents: (s.total_price != null && s.total_price < s.base_price)
+          ? Math.round(s.total_price * 100)
+          : null,
+        availability: s.product_availability ?? 'unknown',
+        retailer_sku: null,
+        refreshed_at: new Date().toISOString(),
+        shipping_cents:    delivery.shipping_cents,
+        delivery_message:  delivery.delivery_message,
+        delivery_date_min: delivery.delivery_date_min,
+        delivery_date_max: delivery.delivery_date_max,
+      };
+    });
 }
 
 // SHA-256 hash of stable product fields.
@@ -433,8 +536,17 @@ const productRow = {
 
   const internalId = await upsertProduct(productRow);
 
-  // Write all valid sellers to product_pricing
-  const pricingRows = mapSellersTopricing(sellers, internalId);
+  // Apply merchant cap before writing: 
+  const rankedSellers = [...sellers]
+    .sort((a, b) => {
+      if (isTrustedMerchant(a.seller_name)) return -1;
+      if (isTrustedMerchant(b.seller_name)) return 1;
+      if (b.seller_rating !== a.seller_rating) return (b.seller_rating ?? 0) - (a.seller_rating ?? 0);
+      return (a.base_price ?? Infinity) - (b.base_price ?? Infinity);
+    })
+    .slice(0, MAX_MERCHANTS_PER_PRODUCT);
+
+  const pricingRows = mapSellersTopricing(rankedSellers, internalId);
 
   for (const pricingRow of pricingRows) {
     await upsertPricing(pricingRow);
