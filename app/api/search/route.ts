@@ -819,6 +819,17 @@ export async function POST(request: NextRequest) {
 
       candidates = toSerpAPICandidates(transformProducts(rawItems), queryOrigins);
 
+      // Fire-and-forget query log insert — do not await, never block response
+      // Logs raw SerpAPI queries for offline DataForSEO catalog enrichment
+      // Kevin's batch job reads query_log WHERE processed = false
+      const supabaseForLog = getSupabaseClient();
+      if (supabaseForLog) {
+        supabaseForLog
+          .from('query_log')
+          .insert({ query: baseQuery, session_id: null })
+          .then(() => {}, () => {});
+      }
+
     } catch (err) {
       console.error('[POST /api/search] SerpAPI failed:', err);
       return NextResponse.json(

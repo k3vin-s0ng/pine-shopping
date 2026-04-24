@@ -25,7 +25,7 @@ export interface IntentExtractionResult {
   search_query: string;
   related_search_queries?: string[];
   raw_intent_summary: string;
-  confidence_score: number;
+  confidence_score: nuxmber;
   clarification_needed: boolean;
   clarification_question?: string;
   chat_response?: string;
