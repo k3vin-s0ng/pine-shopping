@@ -100,6 +100,18 @@ function ConversationView() {
                   ...(data.intent.soft_preferences?.vibe_keywords ?? []),
                 ]),
               ],
+              color_palette: [
+                ...new Set([
+                  ...(prev.soft_preferences?.color_palette ?? []),
+                  ...(data.intent.soft_preferences?.color_palette ?? []),
+                ]),
+              ],
+              style_avoid: [
+                ...new Set([
+                  ...(prev.soft_preferences?.style_avoid ?? []),
+                  ...(data.intent.soft_preferences?.style_avoid ?? []),
+                ]),
+              ],
             },
           }));
         }
